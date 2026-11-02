@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { beginTouch, moveTouch, finishTouch, clickAllowed, type TouchGesture } from './gestures';
+interface TouchPointer { pointerType: string; pointerId: number; clientX: number; clientY: number; timeStamp: number; isPrimary?: boolean }
 
 export function useSize() {
   const ref = useRef<HTMLDivElement>(null);
@@ -31,4 +33,16 @@ export function useAnimatedNumber(value: number, reducedMotion: boolean, precisi
     return () => cancelAnimationFrame(handle);
   }, [value, reducedMotion, precision]);
   return display;
+}
+
+export function useTouchTap() {
+  const gesture = useRef<TouchGesture | null>(null);
+  const start = (event: TouchPointer) => {
+    gesture.current = event.pointerType === 'touch' ? beginTouch(event.pointerId, event.clientX, event.clientY, event.timeStamp) : null;
+    if (event.isPrimary === false && gesture.current) gesture.current.cancelled = true;
+  };
+  const move = (event: TouchPointer) => { if (event.pointerType === 'touch' && gesture.current) moveTouch(gesture.current, event.pointerId, event.clientX, event.clientY); };
+  const cancel = () => { if (gesture.current) { gesture.current.cancelled = true; gesture.current.accepted = false; } };
+  const end = (event: TouchPointer) => event.pointerType === 'touch' && gesture.current !== null && finishTouch(gesture.current, event.pointerId, event.clientX, event.clientY, event.timeStamp);
+  return { start, move, cancel, end, allowClick: (detail: number) => clickAllowed(gesture.current, detail) };
 }

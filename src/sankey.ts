@@ -10,7 +10,7 @@ export function sectorFlows(rows: SectorChange[], direction: 'increase' | 'decre
   return { flows, total, top, rest, topTotal: top.reduce((sum, f) => sum + f.value, 0), restTotal: rest.reduce((sum, f) => sum + f.value, 0) };
 }
 
-export function flowLayout(values: number[], totalPixels = 238) {
+export function flowLayout(values: number[], totalPixels = 238, topSlot = 58) {
   const total = values.reduce((sum, value) => sum + value, 0);
   if (!total) return { flows: [], height: 120, sourceY: 0, sourceHeight: 0, topEnd: 0, restStart: 0 };
   const scale = totalPixels / total;
@@ -18,7 +18,7 @@ export function flowLayout(values: number[], totalPixels = 238) {
   const flows = values.map((value, index) => {
     if (index === 6) { y += 28; restStart = y; }
     const thickness = value * scale;
-    const slot = index < 6 ? Math.max(58, thickness + 12) : thickness + 3;
+    const slot = index < 6 ? Math.max(topSlot, thickness + 12) : thickness + 3;
     const flow = { value, thickness, targetY: y + (slot - thickness) / 2, sourceOffset };
     sourceOffset += thickness; y += slot;
     if (index === Math.min(5, values.length - 1)) topEnd = y;

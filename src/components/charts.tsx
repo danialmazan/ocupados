@@ -7,7 +7,7 @@ import { easeCubicOut } from 'd3-ease';
 import 'd3-transition';
 import { contribution, historicalValue, national, ordered, persons, readableYearValue } from '../data';
 import { compact, fmt, messages, metricValue, pct } from '../i18n';
-import { useSize } from '../hooks';
+import { useSize, useTouchTap } from '../hooks';
 import { useApp } from '../state';
 import { tileInk } from '../palettes';
 import { sectorFlows, flowLayout } from '../sankey';
@@ -60,11 +60,12 @@ function position(event: PointerEvent | FocusEvent): { x: number; y: number } {
 }
 
 export function TreemapChart() {
-  const { data, state, select, reducedMotion, pause } = useApp(), t = messages[state.lang];
+  const { data, state, select, reducedMotion, pause, restoringFocus } = useApp(), t = messages[state.lang];
   const [container, width] = useSize();
   const ref = useRef<SVGGElement>(null);
   const previousSize = useRef({ width: 0, height: 0 });
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
+  useEffect(() => setTooltip(null), [state.sector]);
   const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => { void document.fonts.ready.then(() => setFontsReady(true)); }, []);
   const mobile = width > 0 && width < 680;
@@ -101,7 +102,7 @@ export function TreemapChart() {
       .classed('selected', d => d.data.sector!.id === state.sector)
       .on('pointermove', function(event: PointerEvent, d) { if (event.pointerType === 'touch') return; setTooltip({ ...position(event), title: d.data.sector!.name[state.lang], value: fmt(d.value!, state.lang), sub: `${state.year} · ${pct(d.value! / total, state.lang)} ${t.shareOfEmployment}`, colour: d.data.sector!.colour }); })
       .on('pointerleave blur', () => setTooltip(null))
-      .on('focus', function(event: FocusEvent, d) { pause(); setTooltip({ ...position(event), title: d.data.sector!.name[state.lang], value: fmt(d.value!, state.lang), sub: `${state.year} · ${pct(d.value! / total, state.lang)} ${t.shareOfEmployment}`, colour: d.data.sector!.colour }); })
+      .on('focus', function(event: FocusEvent, d) { if (restoringFocus.current) return; pause(); setTooltip({ ...position(event), title: d.data.sector!.name[state.lang], value: fmt(d.value!, state.lang), sub: `${state.year} · ${pct(d.value! / total, state.lang)} ${t.shareOfEmployment}`, colour: d.data.sector!.colour }); })
       .on('click', (_, d) => { setTooltip(null); select(d.data.sector!.id); })
       .on('keydown', function(event: KeyboardEvent, d) { keyboardActivate(event, this, () => { setTooltip(null); select(d.data.sector!.id); }); });
     merged.interrupt().transition().duration(duration).ease(easeCubicOut).attr('transform', d => `translate(${d.x0},${d.y0})`);
@@ -119,15 +120,16 @@ export function TreemapChart() {
     });
     return () => { parent.selectAll('*').interrupt(); };
   }, [data, state.year, state.lang, state.sector, select, reducedMotion, width, height, tree, pause, t, fontsReady]);
-  return <div ref={container} className="treemap-wrap" style={{ minHeight: height }}><svg className="treemap-svg" width={width || '100%'} height={height} role="group" aria-label={`${t.structureTitle} ${state.year}. ${t.structureHint}`}><g ref={ref} /></svg><Tooltip content={tooltip} /></div>;
+  return <div ref={container} className="treemap-wrap" style={{ minHeight: height }}><svg className="treemap-svg" width={width || '100%'} height={height} role="group" aria-label={`${t.structureTitle} ${state.year}. ${t.structureHint}`}><g ref={ref} /></svg><Tooltip content={state.sector ? null : tooltip} /></div>;
 }
 
 export function RankingChart({ rows, metric }: { rows: SectorChange[]; metric: Metric }) {
-  const { state, select, reducedMotion } = useApp(), t = messages[state.lang];
+  const { state, select, reducedMotion, restoringFocus } = useApp(), t = messages[state.lang];
   const [container, width] = useSize();
   const ref = useRef<SVGGElement>(null), axis = useRef<SVGGElement>(null);
   const previousWidth = useRef(0);
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
+  useEffect(() => setTooltip(null), [state.sector]);
   const visible = useMemo(() => ordered(rows, metric, state.sort, state.view === 'leaders'), [rows, metric, state.sort, state.view]);
   const mobile = width < 680, rowHeight = 44, height = visible.length * rowHeight + 36;
   const outside = state.sector ? rows.find(row => row.sector.id === state.sector && !visible.some(v => v.sector.id === state.sector)) : undefined;
@@ -156,7 +158,7 @@ export function RankingChart({ rows, metric }: { rows: SectorChange[]; metric: M
       .attr('aria-label', d => `${d.sector.name[state.lang]}. ${state.from}–${state.to}: ${metricValue(d[metric], metric, state.lang)}. ${t.select}.`)
       .classed('selected', d => d.sector.id === state.sector)
       .on('click', (_, d) => { setTooltip(null); select(d.sector.id); })
-      .on('pointermove focus', function(event: PointerEvent | FocusEvent, d) { if (event instanceof PointerEvent && event.pointerType === 'touch') return; setTooltip({ ...position(event), title: d.sector.name[state.lang], value: metricValue(d[metric], metric, state.lang), sub: `${state.from} → ${state.to} · ${t[metric === 'share' ? 'shareChange' : metric === 'relative' ? 'percentChange' : 'peopleChange']}`, colour: d.sector.colour }); })
+      .on('pointermove focus', function(event: PointerEvent | FocusEvent, d) { if ((event instanceof PointerEvent && event.pointerType === 'touch') || (event instanceof FocusEvent && restoringFocus.current)) return; setTooltip({ ...position(event), title: d.sector.name[state.lang], value: metricValue(d[metric], metric, state.lang), sub: `${state.from} → ${state.to} · ${t[metric === 'share' ? 'shareChange' : metric === 'relative' ? 'percentChange' : 'peopleChange']}`, colour: d.sector.colour }); })
       .on('pointerleave blur', () => setTooltip(null))
       .on('keydown', function(event: KeyboardEvent, d) { keyboardActivate(event, this, () => select(d.sector.id)); });
     merged.interrupt().transition().duration(duration).ease(easeCubicOut).attr('transform', (_, i) => `translate(0,${i * rowHeight})`);
@@ -173,7 +175,7 @@ export function RankingChart({ rows, metric }: { rows: SectorChange[]; metric: M
     guide.selectAll('text').data([0]).join('text').attr('class', 'axis-label').attr('x', zero).attr('y', visible.length * rowHeight + 20).attr('text-anchor', 'middle').text('0');
     return () => { parent.selectAll('*').interrupt(); };
   }, [rows, visible, width, mobile, rowHeight, state, metric, select, reducedMotion, t]);
-  return <div ref={container} className="ranking-chart"><svg width={width || '100%'} height={height} role="group" aria-label={`${t.rankingTitle} ${state.from}–${state.to}. ${t[metric === 'absolute' ? 'peopleChange' : metric === 'relative' ? 'percentChange' : 'shareChange']}`}><g ref={ref} /><g ref={axis} pointerEvents="none" /></svg>{!visible.length && <p className="empty-chart">{t.noChanges}</p>}{outside && <div className="outside-selection"><span>{t.selectedOutside}</span><button onClick={() => select(outside.sector.id)}><i style={{ background: outside.sector.colour }} />{outside.sector.name[state.lang]}<strong>{metricValue(outside[metric], metric, state.lang)}</strong></button></div>}<Tooltip content={tooltip} /></div>;
+  return <div ref={container} className="ranking-chart"><svg width={width || '100%'} height={height} role="group" aria-label={`${t.rankingTitle} ${state.from}–${state.to}. ${t[metric === 'absolute' ? 'peopleChange' : metric === 'relative' ? 'percentChange' : 'shareChange']}`}><g ref={ref} /><g ref={axis} pointerEvents="none" /></svg>{!visible.length && <p className="empty-chart">{t.noChanges}</p>}{outside && <div className="outside-selection"><span>{t.selectedOutside}</span><button onClick={() => select(outside.sector.id)}><i style={{ background: outside.sector.colour }} />{outside.sector.name[state.lang]}<strong>{metricValue(outside[metric], metric, state.lang)}</strong></button></div>}<Tooltip content={state.sector ? null : tooltip} /></div>;
 }
 
 export function RankingDeck({ rows }: { rows: SectorChange[] }) {
@@ -223,12 +225,14 @@ export function RankingDeck({ rows }: { rows: SectorChange[] }) {
 }
 
 export function ContributionChart({ rows, direction, onDirectionChange }: { rows: SectorChange[]; direction: 'increase' | 'decrease'; onDirectionChange: (value: 'increase' | 'decrease') => void }) {
-  const { data, state, select } = useApp(), t = messages[state.lang];
+  const { data, state, select, restoringFocus } = useApp(), t = messages[state.lang];
   const [container, width] = useSize();
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
+  useEffect(() => setTooltip(null), [state.sector]);
   const values = contribution(rows, national(data, state.to)! - national(data, state.from)!);
-  const model = sectorFlows(rows, direction), layout = flowLayout(model.flows.map(f => f.value));
+  const model = sectorFlows(rows, direction);
   const mobile = width < 680, sourceX = 4, targetX = Math.max(mobile ? 60 : 75, width * (mobile ? .21 : .38));
+  const layout = flowLayout(model.flows.map(f => f.value), 238, mobile ? 50 : 58);
   const bracketX = width - (mobile ? 94 : 136), labelWidth = bracketX - targetX - 25;
   const paths = layout.flows.map(f => {
     const a = sourceX + 9, b = targetX, c = a + (b - a) * .48, d = b - (b - a) * .48;
@@ -243,15 +247,16 @@ export function ContributionChart({ rows, direction, onDirectionChange }: { rows
   if (!values) return <p>{t.unavailable}</p>;
   return <div className="contribution-chart"><div className="contribution-toolbar"><div className="direction-toggle" role="group" aria-label={t.contributionTitle}>{(['increase', 'decrease'] as const).map(value => <button key={value} aria-pressed={direction === value} onClick={() => { onDirectionChange(value); setTooltip(null); }}>{value === 'increase' ? t.increaseView : t.decreaseView}</button>)}</div><div className="sankey-total"><span>{direction === 'increase' ? t.increases : t.decreases}</span><strong>{direction === 'increase' ? '+' : '−'}{fmt(model.total, state.lang)}</strong></div></div><div ref={container} className="sankey-wrap">{model.total ? <><svg className="sankey-svg" width={width || '100%'} height={layout.height} role="group" aria-label={`${direction === 'increase' ? t.increases : t.decreases}: ${fmt(model.total, state.lang)}. ${t.sankeyDescription}`}><rect className="sankey-source" x={sourceX} y={layout.sourceY} width={9} height={layout.sourceHeight} /><g>{model.flows.map((flow, i) => {
     const f = layout.flows[i], top = i < 6, lines = top ? wrap(flow.row.sector.short[state.lang], Math.max(30, labelWidth), mobile ? 12 : 14, 2) : [];
-    return <g key={flow.row.sector.id} className={`sankey-flow ${state.sector === flow.row.sector.id ? 'selected' : ''}`} role="button" tabIndex={i === 0 || state.sector === flow.row.sector.id ? 0 : -1} data-sector={flow.row.sector.id} aria-pressed={state.sector === flow.row.sector.id} aria-label={`${flow.row.sector.name[state.lang]}. ${fmt(flow.value, state.lang)} ${t.peopleEmployed}, ${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}. ${t.select}.`} onClick={() => { setTooltip(null); select(flow.row.sector.id); }} onKeyDown={e => keyboardActivate(e.nativeEvent, e.currentTarget, () => select(flow.row.sector.id))} onPointerMove={e => { if (e.pointerType !== 'touch') setTooltip({ x: e.clientX, y: e.clientY, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: `${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: flow.row.sector.colour }); }} onFocus={e => { const box = e.currentTarget.getBoundingClientRect(); setTooltip({ x: box.x, y: box.y, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: pct(flow.value / model.total, state.lang), colour: flow.row.sector.colour }); }} onPointerLeave={() => setTooltip(null)} onBlur={() => setTooltip(null)}><path className="sankey-ribbon" d={paths[i]} fill={flow.row.sector.colour} /><rect className="sankey-node" x={targetX} y={f.targetY} width={7} height={Math.max(.4, f.thickness)} fill={flow.row.sector.colour} />{top && <><rect className="sankey-hit" x={targetX} y={f.targetY + f.thickness / 2 - 27} width={Math.max(1, bracketX - targetX - 10)} height={54} fill="transparent" /><text className="sankey-name" x={targetX + 15} y={f.targetY + f.thickness / 2 - (lines.length > 1 ? 12 : 5)}>{lines.map((label, j) => <tspan x={targetX + 15} dy={j === 0 ? 0 : 14} key={j}>{label}</tspan>)}</text><text className="sankey-value" x={targetX + 15} y={f.targetY + f.thickness / 2 + 19}>{fmt(flow.value, state.lang)} · {pct(flow.value / model.total, state.lang)}</text></>}</g>;
-  })}</g><path className="sankey-bracket" d={`M${bracketX-7},18h7V${layout.topEnd}h-7`} />{model.rest.length > 0 && <path className="sankey-bracket" d={`M${bracketX-7},${layout.restStart}h7V${layout.height-20}h-7`} />}</svg><div className={`sankey-group top-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (18 + layout.topEnd) / 2 }}>{groupLabel(true)}</div>{model.rest.length > 0 && <div className={`sankey-group rest-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (layout.restStart + layout.height - 20) / 2 }}>{groupLabel(false)}</div>}</> : <p className="empty-chart">{t.noContributions}</p>}</div><Tooltip content={tooltip} /></div>;
+    return <g key={flow.row.sector.id} className={`sankey-flow ${state.sector === flow.row.sector.id ? 'selected' : ''}`} role="button" tabIndex={i === 0 || state.sector === flow.row.sector.id ? 0 : -1} data-sector={flow.row.sector.id} aria-pressed={state.sector === flow.row.sector.id} aria-label={`${flow.row.sector.name[state.lang]}. ${fmt(flow.value, state.lang)} ${t.peopleEmployed}, ${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}. ${t.select}.`} onClick={() => { setTooltip(null); select(flow.row.sector.id); }} onKeyDown={e => keyboardActivate(e.nativeEvent, e.currentTarget, () => select(flow.row.sector.id))} onPointerMove={e => { if (e.pointerType !== 'touch') setTooltip({ x: e.clientX, y: e.clientY, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: `${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: flow.row.sector.colour }); }} onFocus={e => { if (restoringFocus.current) return; const box = e.currentTarget.getBoundingClientRect(); setTooltip({ x: box.x, y: box.y, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: pct(flow.value / model.total, state.lang), colour: flow.row.sector.colour }); }} onPointerLeave={() => setTooltip(null)} onBlur={() => setTooltip(null)}><path className="sankey-ribbon" d={paths[i]} fill={flow.row.sector.colour} /><rect className="sankey-node" x={targetX} y={f.targetY} width={7} height={Math.max(.4, f.thickness)} fill={flow.row.sector.colour} />{top && <><rect className="sankey-hit" x={targetX} y={f.targetY + f.thickness / 2 - (mobile ? 24 : 27)} width={Math.max(1, bracketX - targetX - 10)} height={mobile ? 48 : 54} fill="transparent" /><text className="sankey-name" x={targetX + 15} y={f.targetY + f.thickness / 2 - (lines.length > 1 ? 12 : 5)}>{lines.map((label, j) => <tspan x={targetX + 15} dy={j === 0 ? 0 : 14} key={j}>{label}</tspan>)}</text><text className="sankey-value" x={targetX + 15} y={f.targetY + f.thickness / 2 + 19}>{fmt(flow.value, state.lang)} · {pct(flow.value / model.total, state.lang)}</text></>}</g>;
+  })}</g><path className="sankey-bracket" d={`M${bracketX-7},18h7V${layout.topEnd}h-7`} />{model.rest.length > 0 && <path className="sankey-bracket" d={`M${bracketX-7},${layout.restStart}h7V${layout.height-20}h-7`} />}</svg><div className={`sankey-group top-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (18 + layout.topEnd) / 2 }}>{groupLabel(true)}</div>{model.rest.length > 0 && <div className={`sankey-group rest-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (layout.restStart + layout.height - 20) / 2 }}>{groupLabel(false)}</div>}</> : <p className="empty-chart">{t.noContributions}</p>}</div><Tooltip content={state.sector ? null : tooltip} /></div>;
 }
 
 export function HistoryChart({ sector }: { sector: Sector }) {
   const { data, state, update } = useApp(), t = messages[state.lang];
-  const [container, width] = useSize(), [inspectYear, setInspectYear] = useState(state.year);
-  useEffect(() => setInspectYear(state.year), [state.year, sector.id]);
-  const height = 190, margin = { top: 22, left: 42, right: 10, bottom: 29 };
+  const [container, width] = useSize(), [inspectYear, setInspectYear] = useState(state.year), tap = useTouchTap();
+  const pinnedYear = useRef(state.year);
+  useEffect(() => { pinnedYear.current = state.year; setInspectYear(state.year); }, [state.year, sector.id]);
+  const height = width > 0 && width < 680 ? 166 : 190, margin = { top: 22, left: 42, right: 10, bottom: 29 };
   const points = data.years.map(year => ({ year, value: historicalValue(data, sector.id, year, state.detail) }));
   const max = Math.max(1e-8, ...points.map(p => p.value ?? 0)) * 1.1;
   const x = scaleLinear().domain([data.years[0], data.years.at(-1)!]).range([margin.left, Math.max(margin.left + 1, width - margin.right)]);
@@ -262,7 +267,17 @@ export function HistoryChart({ sector }: { sector: Sector }) {
   const selectedPoint = points.find(p => p.year === inspectYear);
   const inspected = selectedPoint?.value ?? null;
   const clipId = `history-period-${sector.id}`;
-  return <div className="history-chart"><div className="history-mode" role="group" aria-label={t.historical}>{(['people', 'share'] as const).map(mode => <button key={mode} aria-pressed={state.detail === mode} onClick={() => update({ detail: mode })}>{mode === 'people' ? t.people : t.shareToggle}</button>)}</div><div className="history-readout"><strong>{readableYearValue(inspected, state.detail, state.lang)}</strong><span>{inspectYear} · {t.annualAverage}</span></div><div ref={container}><svg width={width || '100%'} height={height} role="img" aria-label={`${sector.name[state.lang]}, ${data.years[0]}–${data.years.at(-1)}. ${t.historicalHint}`} onPointerMove={event => { if (!width) return; const left = event.currentTarget.getBoundingClientRect().left; const year = Math.round(x.invert(event.clientX - left)); setInspectYear(Math.max(data.years[0], Math.min(data.years.at(-1)!, year))); }} onPointerLeave={() => setInspectYear(state.year)}>
+  const atPointer = (clientX: number, svg: SVGSVGElement) => Math.max(data.years[0], Math.min(data.years.at(-1)!, Math.round(x.invert(clientX - svg.getBoundingClientRect().left))));
+  const pin = (year: number) => { pinnedYear.current = year; setInspectYear(year); };
+  return <div className="history-chart"><div className="history-mode" role="group" aria-label={t.historical}>{(['people', 'share'] as const).map(mode => <button key={mode} aria-pressed={state.detail === mode} onClick={() => update({ detail: mode })}>{mode === 'people' ? t.people : t.shareToggle}</button>)}</div><div className="history-readout"><strong>{readableYearValue(inspected, state.detail, state.lang)}</strong><span>{inspectYear}</span></div><div ref={container} className="history-surface"><svg className="history-svg" width={width || '100%'} height={height} role="slider" tabIndex={0} aria-label={`${sector.name[state.lang]}, ${data.years[0]}–${data.years.at(-1)}. ${t.year}`} aria-valuemin={data.years[0]} aria-valuemax={data.years.at(-1)} aria-valuenow={inspectYear} aria-valuetext={`${inspectYear}: ${readableYearValue(inspected, state.detail, state.lang)}${state.detail === 'people' ? ` ${t.people}` : ''}`} onKeyDown={event => {
+      let next = inspectYear;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next--;
+      else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next++;
+      else if (event.key === 'Home') next = data.years[0];
+      else if (event.key === 'End') next = data.years.at(-1)!;
+      else return;
+      event.preventDefault(); pin(Math.max(data.years[0], Math.min(data.years.at(-1)!, next)));
+    }} onPointerDown={tap.start} onPointerMove={event => { if (event.pointerType === 'touch') { tap.move(event); return; } if (width) setInspectYear(atPointer(event.clientX, event.currentTarget)); }} onPointerUp={event => { if (width && tap.end(event)) pin(atPointer(event.clientX, event.currentTarget)); }} onPointerCancel={tap.cancel} onPointerLeave={event => { if (event.pointerType !== 'touch') setInspectYear(pinnedYear.current); }}>
       <defs><clipPath id={clipId}><rect className="history-window" x={x(state.from) - .5} y={0} width={Math.max(1, x(state.to) - x(state.from) + 1)} height={height} /></clipPath></defs>
       {y.ticks(3).map(value => <g key={value}><line className="history-grid" x1={margin.left} x2={width - margin.right} y1={y(value)} y2={y(value)} /><text className="axis-label" x={margin.left - 7} y={y(value) + 4} textAnchor="end">{state.detail === 'people' ? compact(value, state.lang) : pct(value, state.lang, 0)}</text></g>)}
       {[data.years[0], 2012, 2016, 2021, data.years.at(-1)!].filter((v, i, a) => a.indexOf(v) === i && data.years.includes(v)).map(year => <text key={year} className="axis-label" x={x(year)} y={height - 5} textAnchor={year === data.years[0] ? 'start' : year === data.years.at(-1) ? 'end' : 'middle'}>{year}</text>)}
@@ -273,5 +288,5 @@ export function HistoryChart({ sector }: { sector: Sector }) {
       <line className="history-break-marker" x1={x(2021)} x2={x(2021)} y1={margin.top} y2={height - margin.bottom} />
       {points.filter(p => p.value !== null && (p.year === state.from || p.year === state.to)).map(p => <circle key={p.year} cx={x(p.year)} cy={y(p.value!)} r={4} className="history-endpoint" />)}
       {inspected !== null && <g className="history-cursor"><line x1={x(inspectYear)} x2={x(inspectYear)} y1={margin.top} y2={height - margin.bottom} /><circle cx={x(inspectYear)} cy={y(inspected)} r={5} /></g>}
-    </svg></div><label className="history-year-selector">{t.year}<select value={inspectYear} onChange={e => setInspectYear(Number(e.target.value))}>{data.years.map(year => <option key={year}>{year}</option>)}</select><span>{t.historicalHint}</span></label></div>;
+    </svg></div></div>;
 }

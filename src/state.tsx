@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { defaults, parseState, stateSearch } from './data';
 import type { Dataset, Exploration } from './types';
 
@@ -11,11 +11,13 @@ interface AppContextValue {
   step: (direction: number) => void;
   togglePlayback: () => void;
   pause: () => void;
+  restoringFocus: RefObject<boolean>;
+  restoreFocus: (target: HTMLElement | null) => void;
 }
 const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ data, children }: { data: Dataset; children: ReactNode }) {
   const [state, dispatch] = useReducer((_: Exploration, next: Exploration) => next, data, d => parseState(window.location.search, d));
-  const ref = useRef(state);
+  const ref = useRef(state), restoringFocus = useRef(false), lastInput = useRef('keyboard');
   const [playing, setPlaying] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
   const update = useCallback((patch: Partial<Exploration>, mode: UpdateMode = 'push') => {
@@ -24,6 +26,17 @@ export function AppProvider({ data, children }: { data: Dataset; children: React
     ref.current = next;
     if (mode !== 'none') window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', `${window.location.pathname}${stateSearch(next)}${window.location.hash}`);
     dispatch(next);
+  }, []);
+  const restoreFocus = useCallback((target: HTMLElement | null) => {
+    if (lastInput.current === 'touch') return;
+    restoringFocus.current = true;
+    try { target?.focus({ preventScroll: true }); } finally { restoringFocus.current = false; }
+  }, []);
+  useEffect(() => {
+    const pointer = (event: PointerEvent) => { lastInput.current = event.pointerType; };
+    const keyboard = () => { lastInput.current = 'keyboard'; };
+    window.addEventListener('pointerdown', pointer, true); window.addEventListener('keydown', keyboard, true);
+    return () => { window.removeEventListener('pointerdown', pointer, true); window.removeEventListener('keydown', keyboard, true); };
   }, []);
   const pause = useCallback(() => setPlaying(false), []);
   const compare = useCallback((from: number, to: number) => { setPlaying(false); update({ from, to, year: to }); }, [update]);
@@ -69,7 +82,7 @@ export function AppProvider({ data, children }: { data: Dataset; children: React
     }, 1200);
     return () => clearInterval(timer);
   }, [playing, data.years, update]);
-  return <AppContext value={{ data, state, playing, reducedMotion, update, compare, select, step, togglePlayback, pause }}>{children}</AppContext>;
+  return <AppContext value={{ data, state, playing, reducedMotion, update, compare, select, step, togglePlayback, pause, restoringFocus, restoreFocus }}>{children}</AppContext>;
 }
 export function useApp() { const context = useContext(AppContext); if (!context) throw new Error('Missing application provider'); return context; }
 export { defaults };

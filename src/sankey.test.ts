@@ -34,6 +34,15 @@ describe('Sankey changes, denominators and geometry', () => {
     expect(sectorFlows(changes(data, 2018, 2025), 'decrease')).toMatchObject({ total: 116500, topTotal: 116500, restTotal: 0 });
     expect(sectorFlows(changes(data, 2008, 2013), 'increase').total).toBeGreaterThan(0);
   });
+  it('compacts mobile top-six spacing without changing flow widths or allowing overlaps', () => {
+    for (const [index, from] of data.years.entries()) for (const to of data.years.slice(index + 1)) for (const direction of ['increase', 'decrease'] as const) {
+      const values = sectorFlows(changes(data, from, to), direction).flows.map(f => f.value);
+      const desktop = flowLayout(values), mobile = flowLayout(values, 238, 50);
+      expect(mobile.height).toBeLessThanOrEqual(desktop.height);
+      expect(mobile.flows.map(f => f.thickness)).toEqual(desktop.flows.map(f => f.thickness));
+      mobile.flows.forEach((f, i) => { if (i > 0) expect(f.targetY).toBeGreaterThan(mobile.flows[i - 1].targetY + mobile.flows[i - 1].thickness); });
+    }
+  });
   it('handles no changes and fewer than six sectors', () => {
     expect(flowLayout([])).toMatchObject({ flows: [], sourceHeight: 0 });
     const rows = changes(data, 2018, 2025).map(r => ({ ...r, absolute: 0 }));

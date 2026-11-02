@@ -7,13 +7,13 @@ import { sectorDescription } from '../sectorCopy';
 import { Icon } from './UI';
 
 export function Inspector() {
-  const { data, state, select } = useApp(), t = messages[state.lang];
+  const { data, state, select, restoreFocus } = useApp(), t = messages[state.lang];
   const sector = data.sectors.find(s => s.id === state.sector);
   const panel = useRef<HTMLElement>(null), heading = useRef<HTMLHeadingElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const close = () => {
     select(null);
-    requestAnimationFrame(() => (returnFocus.current?.isConnected ? returnFocus.current : document.getElementById('sector-picker'))?.focus({ preventScroll: true }));
+    requestAnimationFrame(() => restoreFocus(returnFocus.current?.isConnected ? returnFocus.current : document.getElementById('sector-picker')));
   };
   useEffect(() => {
     if (!sector) return;
