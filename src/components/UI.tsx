@@ -26,9 +26,9 @@ export function SectionHeading({ number, title, children, id }: { number: string
   return <div className="section-heading"><div><span className="eyebrow">{number}</span><h2 id={id}>{title}</h2></div>{children}</div>;
 }
 
-export function BreakNote({ compact = false }: { compact?: boolean }) {
+export function BreakNote({ compact = false, to }: { compact?: boolean; to?: number }) {
   const { state } = useApp(), t = messages[state.lang];
-  return crossesBreak(state.from, state.to) ? <a className={`break-note ${compact ? 'is-compact' : ''}`} href="#methodology-breaks" onClick={() => { document.querySelectorAll<HTMLDetailsElement>('#methodology-panel, #methodology-breaks').forEach(el => { el.open = true; }); }}><Icon name="info" size={14} /><span>{compact ? t.breakBadge : t.breakShort}</span></a> : null;
+  return crossesBreak(state.from, to ?? state.to) ? <a className={`break-note ${compact ? 'is-compact' : ''}`} href="#methodology-breaks" onClick={() => { document.querySelectorAll<HTMLDetailsElement>('#methodology-panel, #methodology-breaks').forEach(el => { el.open = true; }); }}><Icon name="info" size={14} /><span>{compact ? t.breakBadge : t.breakShort}</span></a> : null;
 }
 
 export interface TooltipContent { x: number; y: number; title: string; value: string; sub: string; colour?: string }

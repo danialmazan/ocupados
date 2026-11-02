@@ -67,7 +67,11 @@ URL settings: `lang`, `from`, `to`, `year`, `sector`, `metric=absolute|relative|
 
 Self-hosted Archivo and Source Serif 4 fonts are provided by Fontsource under their included OFL licenses. The approved “Blanco y señal” palette and two alternatives are defined in `src/palettes.json`; sector colours are presentation overrides and never change the frozen statistical release. Each palette has 35 distinct colours with automatic AA-contrast tile text. Keyboard chart navigation uses arrow keys, Home/End and Enter/Space; a sector search and accessible data table provide alternatives to small marks.
 
-On mobile the three ranking metrics form a horizontally scrollable strip. Selecting any sector opens its full modal directly, with current-year employment, share and rank. The fixed bar contains the brand, one comparison dropdown (2018, 2008 and 2020 presets plus custom years), and ES/EN. Section 04 is collapsed by default; direct methodology links reveal the referenced details.
+On mobile the three ranking metrics form a horizontally scrollable strip. Selecting any sector opens its full modal directly, with current-year employment, share and rank. The comparison dropdown (2018, 2008 and 2020 presets plus custom years) sits beside ES/EN in the masthead, below it on mobile. After scrolling, a fixed bar shows the brand, centred dropdown and ES/EN without adding a separate initial row. The national summary follows the displayed year, with the change from the comparison start shown in millions. Sector detail aligns the current-year indicators with its title and uses one comparison row. Section 04 is collapsed by default; direct methodology links reveal the referenced details.
+
+## Link previews
+
+Static HTML supplies the exact Spanish title and description requested for sharing, Open Graph and Twitter tags, and explicit image dimensions and alternative text. `src/share.ts` keeps the browser title consistent. `tools/generate-social.mjs` renders `public/social-v2.png` from the reviewed employment data and palette. Fontkit and WOFF2 decompression turn the self-hosted Archivo and Source Serif glyphs into outlines, so the preview is independent of system fonts. The old image URL remains available for existing references.
 
 ## Deployment
 

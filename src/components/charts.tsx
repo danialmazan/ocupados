@@ -129,7 +129,7 @@ export function RankingChart({ rows, metric }: { rows: SectorChange[]; metric: M
   const previousWidth = useRef(0);
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
   const visible = useMemo(() => ordered(rows, metric, state.sort, state.view === 'leaders'), [rows, metric, state.sort, state.view]);
-  const mobile = width < 680, rowHeight = mobile ? 58 : 42, height = visible.length * rowHeight + 36;
+  const mobile = width < 680, rowHeight = 44, height = visible.length * rowHeight + 36;
   const outside = state.sector ? rows.find(row => row.sector.id === state.sector && !visible.some(v => v.sector.id === state.sector)) : undefined;
   useEffect(() => {
     if (!width || !ref.current || !axis.current) return;
@@ -137,9 +137,11 @@ export function RankingChart({ rows, metric }: { rows: SectorChange[]; metric: M
     previousWidth.current = width;
     const values = rows.map(r => r[metric]).filter(v => v !== null) as number[];
     const min = Math.min(0, ...values), max = Math.max(0, ...values);
-    const plotStart = mobile ? 0 : 232, plotEnd = mobile ? width - 2 : width - 100;
+    const labelWidth = mobile ? Math.max(88, Math.min(126, width * .34)) : 232;
+    const valueWidth = mobile ? 79 : 100;
+    const plotStart = labelWidth + (mobile ? 7 : 0), plotEnd = width - valueWidth;
     const x = scaleLinear().domain(min === max ? [-1, 1] : [min, max]).range([plotStart + 2, plotEnd - 3]);
-    const zero = x(0), barY = mobile ? 31 : 12, barHeight = mobile ? 15 : 18;
+    const zero = x(0), barY = 13, barHeight = 18;
     const groups = parent.selectAll<SVGGElement, SectorChange>('g.rank-row').data(visible, d => d.sector.id);
     groups.exit().interrupt().remove();
     const entering = groups.enter().append('g').attr('class', 'rank-row').attr('role', 'button').attr('transform', (_, i) => `translate(0,${i * rowHeight})`);
@@ -163,11 +165,11 @@ export function RankingChart({ rows, metric }: { rows: SectorChange[]; metric: M
     merged.select('rect.rank-bar').attr('y', barY).attr('height', barHeight).attr('fill', d => d.sector.colour).interrupt().transition().duration(duration).ease(easeCubicOut).attr('x', d => Math.min(zero, x(d[metric]!))).attr('width', d => Math.abs(x(d[metric]!) - zero));
     merged.each(function(d) {
       const label = d3select(this).select('text.rank-label');
-      const lines = wrap(d.sector.short[state.lang], mobile ? width - 130 : 215, mobile ? 13 : 14, 2);
-      label.selectAll<SVGTSpanElement, string>('tspan').data(lines).join('tspan').attr('x', 0).attr('y', (_, i) => (mobile ? 15 : lines.length === 1 ? 26 : 17) + i * 15).text(line => line);
+      const lines = wrap(d.sector.short[state.lang], mobile ? labelWidth : 215, mobile ? 12 : 14, 2);
+      label.selectAll<SVGTSpanElement, string>('tspan').data(lines).join('tspan').attr('x', 0).attr('y', (_, i) => (lines.length === 1 ? 27 : 18) + i * 15).text(line => line);
     });
-    merged.select('text.rank-value').attr('x', width - 1).attr('y', mobile ? 15 : 26).attr('text-anchor', 'end').text(d => metricValue(d[metric], metric, state.lang));
-    guide.selectAll('line').data([0]).join('line').attr('class', 'zero-line').attr('x1', zero).attr('x2', zero).attr('y1', mobile ? 26 : 4).attr('y2', Math.max(20, visible.length * rowHeight));
+    merged.select('text.rank-value').attr('x', width - 1).attr('y', 27).attr('text-anchor', 'end').text(d => metricValue(d[metric], metric, state.lang));
+    guide.selectAll('line').data([0]).join('line').attr('class', 'zero-line').attr('x1', zero).attr('x2', zero).attr('y1', 4).attr('y2', Math.max(20, visible.length * rowHeight));
     guide.selectAll('text').data([0]).join('text').attr('class', 'axis-label').attr('x', zero).attr('y', visible.length * rowHeight + 20).attr('text-anchor', 'middle').text('0');
     return () => { parent.selectAll('*').interrupt(); };
   }, [rows, visible, width, mobile, rowHeight, state, metric, select, reducedMotion, t]);
@@ -220,10 +222,9 @@ export function RankingDeck({ rows }: { rows: SectorChange[] }) {
   return <div className="ranking-deck" ref={deck} onScrollEnd={settle} style={mobile && deckHeight ? { height: deckHeight } : undefined}>{(mobile ? metrics : [state.metric]).map(metric => <div key={metric} ref={el => { panes.current[metrics.indexOf(metric)] = el; }} className="ranking-pane" aria-label={t[metric === 'absolute' ? 'peopleChange' : metric === 'relative' ? 'percentChange' : 'shareChange']} inert={mobile && metric !== state.metric}><p className="metric-unit">{t[metric === 'absolute' ? 'peopleChange' : metric === 'relative' ? 'percentChange' : 'shareChange']}</p><RankingChart rows={rows} metric={metric} /></div>)}</div>;
 }
 
-export function ContributionChart({ rows }: { rows: SectorChange[] }) {
+export function ContributionChart({ rows, direction, onDirectionChange }: { rows: SectorChange[]; direction: 'increase' | 'decrease'; onDirectionChange: (value: 'increase' | 'decrease') => void }) {
   const { data, state, select } = useApp(), t = messages[state.lang];
   const [container, width] = useSize();
-  const [direction, setDirection] = useState<'increase' | 'decrease'>('increase');
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
   const values = contribution(rows, national(data, state.to)! - national(data, state.from)!);
   const model = sectorFlows(rows, direction), layout = flowLayout(model.flows.map(f => f.value));
@@ -237,10 +238,10 @@ export function ContributionChart({ rows }: { rows: SectorChange[] }) {
   const groupLabel = (top: boolean) => {
     const amount = top ? model.topTotal : model.restTotal, count = top ? model.top.length : model.rest.length;
     const title = `${top ? t.topSectors : t.otherSectors} ${count}`;
-    return <><span>{title} {t.sectorsLabel}</span><strong>{fmt(amount, state.lang)}</strong><span>{model.total ? pct(amount / model.total, state.lang) : '—'}</span></>;
+    return <><span>{title} {t.sectorsLabel}</span><strong>{fmt(amount, state.lang)}</strong><span className="sankey-group-share"><b>{model.total ? pct(amount / model.total, state.lang) : '—'}</b><small>{direction === 'increase' ? t.ofTotalIncrease : t.ofTotalDecrease}</small></span></>;
   };
   if (!values) return <p>{t.unavailable}</p>;
-  return <div className="contribution-chart"><div className="contribution-toolbar"><div className="direction-toggle" role="group" aria-label={t.contributionTitle}>{(['increase', 'decrease'] as const).map(value => <button key={value} aria-pressed={direction === value} onClick={() => { setDirection(value); setTooltip(null); }}>{value === 'increase' ? t.increaseView : t.decreaseView}</button>)}</div><div className="sankey-total"><span>{direction === 'increase' ? t.increases : t.decreases}</span><strong>{direction === 'increase' ? '+' : '−'}{fmt(model.total, state.lang)}</strong></div></div><div ref={container} className="sankey-wrap">{model.total ? <><svg className="sankey-svg" width={width || '100%'} height={layout.height} role="group" aria-label={`${direction === 'increase' ? t.increases : t.decreases}: ${fmt(model.total, state.lang)}. ${t.sankeyDescription}`}><rect className="sankey-source" x={sourceX} y={layout.sourceY} width={9} height={layout.sourceHeight} /><g>{model.flows.map((flow, i) => {
+  return <div className="contribution-chart"><div className="contribution-toolbar"><div className="direction-toggle" role="group" aria-label={t.contributionTitle}>{(['increase', 'decrease'] as const).map(value => <button key={value} aria-pressed={direction === value} onClick={() => { onDirectionChange(value); setTooltip(null); }}>{value === 'increase' ? t.increaseView : t.decreaseView}</button>)}</div><div className="sankey-total"><span>{direction === 'increase' ? t.increases : t.decreases}</span><strong>{direction === 'increase' ? '+' : '−'}{fmt(model.total, state.lang)}</strong></div></div><div ref={container} className="sankey-wrap">{model.total ? <><svg className="sankey-svg" width={width || '100%'} height={layout.height} role="group" aria-label={`${direction === 'increase' ? t.increases : t.decreases}: ${fmt(model.total, state.lang)}. ${t.sankeyDescription}`}><rect className="sankey-source" x={sourceX} y={layout.sourceY} width={9} height={layout.sourceHeight} /><g>{model.flows.map((flow, i) => {
     const f = layout.flows[i], top = i < 6, lines = top ? wrap(flow.row.sector.short[state.lang], Math.max(30, labelWidth), mobile ? 12 : 14, 2) : [];
     return <g key={flow.row.sector.id} className={`sankey-flow ${state.sector === flow.row.sector.id ? 'selected' : ''}`} role="button" tabIndex={i === 0 || state.sector === flow.row.sector.id ? 0 : -1} data-sector={flow.row.sector.id} aria-pressed={state.sector === flow.row.sector.id} aria-label={`${flow.row.sector.name[state.lang]}. ${fmt(flow.value, state.lang)} ${t.peopleEmployed}, ${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}. ${t.select}.`} onClick={() => { setTooltip(null); select(flow.row.sector.id); }} onKeyDown={e => keyboardActivate(e.nativeEvent, e.currentTarget, () => select(flow.row.sector.id))} onPointerMove={e => { if (e.pointerType !== 'touch') setTooltip({ x: e.clientX, y: e.clientY, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: `${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: flow.row.sector.colour }); }} onFocus={e => { const box = e.currentTarget.getBoundingClientRect(); setTooltip({ x: box.x, y: box.y, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: pct(flow.value / model.total, state.lang), colour: flow.row.sector.colour }); }} onPointerLeave={() => setTooltip(null)} onBlur={() => setTooltip(null)}><path className="sankey-ribbon" d={paths[i]} fill={flow.row.sector.colour} /><rect className="sankey-node" x={targetX} y={f.targetY} width={7} height={Math.max(.4, f.thickness)} fill={flow.row.sector.colour} />{top && <><rect className="sankey-hit" x={targetX} y={f.targetY + f.thickness / 2 - 27} width={Math.max(1, bracketX - targetX - 10)} height={54} fill="transparent" /><text className="sankey-name" x={targetX + 15} y={f.targetY + f.thickness / 2 - (lines.length > 1 ? 12 : 5)}>{lines.map((label, j) => <tspan x={targetX + 15} dy={j === 0 ? 0 : 14} key={j}>{label}</tspan>)}</text><text className="sankey-value" x={targetX + 15} y={f.targetY + f.thickness / 2 + 19}>{fmt(flow.value, state.lang)} · {pct(flow.value / model.total, state.lang)}</text></>}</g>;
   })}</g><path className="sankey-bracket" d={`M${bracketX-7},18h7V${layout.topEnd}h-7`} />{model.rest.length > 0 && <path className="sankey-bracket" d={`M${bracketX-7},${layout.restStart}h7V${layout.height-20}h-7`} />}</svg><div className={`sankey-group top-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (18 + layout.topEnd) / 2 }}>{groupLabel(true)}</div>{model.rest.length > 0 && <div className={`sankey-group rest-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (layout.restStart + layout.height - 20) / 2 }}>{groupLabel(false)}</div>}</> : <p className="empty-chart">{t.noContributions}</p>}</div><Tooltip content={tooltip} /></div>;

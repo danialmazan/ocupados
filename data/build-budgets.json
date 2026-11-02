@@ -1,9 +1,9 @@
 {
-  "jsGzipBytes": 109029,
-  "cssGzipBytes": 6387,
+  "jsGzipBytes": 109515,
+  "cssGzipBytes": 7515,
   "dataGzipBytes": 11082,
   "normalFontBytes": 85864,
-  "initialTransferBudgetBytes": 213198,
+  "initialTransferBudgetBytes": 214871,
   "limits": {
     "js": 200000,
     "data": 50000,
