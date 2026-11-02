@@ -31,7 +31,7 @@ export function BreakNote({ compact = false }: { compact?: boolean }) {
 export function InsightLine({ insight }: { insight: Insight | undefined }) {
   const { state, select } = useApp();
   if (!insight) return null;
-  const inner = <><span className="insight-marker" aria-hidden="true">↗</span><span>{insight.text}</span>{insight.sector && <Icon name="arrow" size={17} />}</>;
+  const inner = <><span className="insight-marker" aria-hidden="true"><Icon name="arrow" size={18} /></span><span>{insight.text}</span>{insight.sector && <Icon name="arrow" size={17} />}</>;
   return <div className="insight-line"><span className="sr-only">{messages[state.lang].estimates}. </span>{insight.sector ? <button onClick={() => select(insight.sector)}>{inner}</button> : <p>{inner}</p>}</div>;
 }
 
