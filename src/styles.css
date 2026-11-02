@@ -117,3 +117,5 @@
 @media(max-width:1199px){.period-inner{width:calc(100% - 64px)}}
 @media(max-width:767px){.period-inner{width:calc(100% - 40px)}}
 @media(max-width:390px){.period-inner{width:calc(100% - 32px)}}
+.skip-link:focus-visible{background:var(--ink);color:var(--paper)}
+.table-scroll:focus-visible{box-shadow:inset 0 -3px 0 var(--accent)}
