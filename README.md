@@ -1,8 +1,8 @@
 # Ocupados
 
-**¿En qué trabaja España y cómo está cambiando?**
+**¿En qué trabaja España?**
 
-Bilingual, mobile-first exploration of employment in Spain: 35 curated industries, annual EPA averages for 2008–2025, a stable animated treemap, linked growth rankings, contributions and sector histories.
+Bilingual, mobile-first exploration of employment in Spain: 35 curated industries, annual EPA averages for 2008–2025, a stable animated treemap, linked top-six growth rankings, increase/decrease Sankey diagrams and sector histories.
 
 Published at **https://danielalmazan.com/ocupados/**. Spanish is the default; a shared URL restores the language, comparison, displayed year, sector and chart settings.
 
@@ -23,7 +23,7 @@ npm run build
 npm run preview
 ```
 
-The build independently regenerates and compares processed outputs against hashed source snapshots. It does **not** download new data. Tests cover every one of the 153 annual comparisons, denominators, rounding reconciliation, unavailable values, zero baselines, URL validation and deterministic insights.
+The build independently regenerates and compares processed outputs against hashed source snapshots. It does **not** download new data. Tests cover every one of the 153 annual comparisons, denominators, rounding reconciliation, unavailable values, zero baselines, Sankey conservation and grouping, colour contrast, and URL validation.
 
 ## Sources and reproducibility
 
@@ -54,18 +54,20 @@ Review changes to snapshots, taxonomy, audit, warnings and processed values **be
 
 - 2008–2020 uses population base 2011; 2021 onwards uses base 2021. The revised 2021–2023 observations are retained. Comparisons crossing 2021 visibly disclose the population-base and methodology changes.
 - Eurostat’s `u`, `b`, and `d` flags remain attributed to Eurostat, not recast as calculated INE sampling errors. Component reliability warnings do not establish the variance of an aggregate.
-- No confidence intervals or statistical significance claims are invented. Percentage-growth highlights exclude endpoints below 50,000 people and relevant reliability concerns; that threshold is editorial.
+- No confidence intervals or statistical significance claims are invented. Comparability and sampling notes remain available in the sector detail and methodology.
 - Source precision is 100 people. The 69-term recipe permits a worst-case rounding discrepancy of ±3,500 against the separately rounded national total. Observed annual differences are at most 400 people.
-- In 2018–2025, sector increases total 3,010,300 and decreases 116,500: a sector net of 2,893,800, versus national change 2,893,400. The −400 rounding difference is shown explicitly. No residual employment category is manufactured.
+- In 2018–2025, sector increases total 3,010,300 and decreases 116,500: a sector net of 2,893,800, versus national change 2,893,400. The −400 rounding difference is retained in the downloadable data and audit; no sectors are adjusted to force a sum. No residual employment category is manufactured.
 - Shares use the published national total. Contribution percentages, where shown, use sums of positive or negative **sector changes**, never net national change and never gross flows of job creation/destruction.
 
 ## Frontend structure
 
-`src/data.ts` contains pure calculations, insights and URL validation. `src/state.tsx` owns shared exploration state and playback. D3 owns dedicated SVG mark groups for the treemap, rankings and contribution band; React owns controls and layout. The historical chart uses D3 scales and paths with React-owned marks. `src/i18n.ts` contains matching ES/EN dictionaries and locale formatters. No client-side path router is needed.
+`src/data.ts` contains pure calculations, insights and URL validation. `src/state.tsx` owns shared exploration state and playback. D3 owns dedicated SVG mark groups for the treemap and rankings; React owns controls, Sankey marks and layout. `src/sankey.ts` computes separate positive/negative flows and proportional, non-overlapping geometry. The historical chart uses D3 scales and paths with React-owned marks. `src/i18n.ts` contains matching ES/EN dictionaries and locale formatters. No client-side path router is needed.
 
 URL settings: `lang`, `from`, `to`, `year`, `sector`, `metric=absolute|relative|share`, `sort=gain|loss|magnitude`, `view=leaders|all`, `detail=people|share`. Invalid parameters safely fall back. Playback keeps the comparison period fixed and moves only the displayed year and history cursor. Reduced motion uses explicit year stepping.
 
-Self-hosted Archivo and Source Serif 4 fonts are provided by Fontsource under their included OFL licenses. The visual design follows the approved white, restrained direction. Keyboard chart navigation uses arrow keys, Home/End and Enter/Space; a sector search and accessible data table provide alternatives to small marks.
+Self-hosted Archivo and Source Serif 4 fonts are provided by Fontsource under their included OFL licenses. The approved “Blanco y señal” palette and two alternatives are defined in `src/palettes.json`; sector colours are presentation overrides and never change the frozen statistical release. Each palette has 35 distinct colours with automatic AA-contrast tile text. Keyboard chart navigation uses arrow keys, Home/End and Enter/Space; a sector search and accessible data table provide alternatives to small marks.
+
+On mobile the three ranking metrics form a horizontally scrollable strip. Selecting any sector opens its full modal directly, with current-year employment, share and rank. The fixed bar contains the brand, one comparison dropdown (2018, 2008 and 2020 presets plus custom years), and ES/EN. Section 04 is collapsed by default; direct methodology links reveal the referenced details.
 
 ## Deployment
 

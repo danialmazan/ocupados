@@ -52,7 +52,7 @@ export function ordered(rows: SectorChange[], metric: Metric, sort: Sort, leader
   let filtered = rows.filter(row => row[metric] !== null);
   if (leaders && sort !== 'magnitude') filtered = filtered.filter(row => sort === 'gain' ? row[metric]! > 0 : row[metric]! < 0);
   filtered.sort((a, b) => (sort === 'magnitude' ? Math.abs(b[metric]!) - Math.abs(a[metric]!) : sort === 'gain' ? b[metric]! - a[metric]! : a[metric]! - b[metric]!) || a.sector.id.localeCompare(b.sector.id));
-  return leaders ? filtered.slice(0, 8) : filtered;
+  return leaders ? filtered.slice(0, 6) : filtered;
 }
 
 export function contribution(rows: SectorChange[], totalChange: number | null) {

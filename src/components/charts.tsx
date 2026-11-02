@@ -6,11 +6,13 @@ import { line } from 'd3-shape';
 import { easeCubicOut } from 'd3-ease';
 import 'd3-transition';
 import { contribution, historicalValue, national, ordered, persons, readableYearValue } from '../data';
-import { compact, fmt, messages, metricValue, pct, signed } from '../i18n';
+import { compact, fmt, messages, metricValue, pct } from '../i18n';
 import { useSize } from '../hooks';
 import { useApp } from '../state';
-import type { Sector, SectorChange } from '../types';
-import { Icon, Tooltip, type TooltipContent } from './UI';
+import { tileInk } from '../palettes';
+import { sectorFlows, flowLayout } from '../sankey';
+import type { Metric, Sector, SectorChange } from '../types';
+import { Tooltip, type TooltipContent } from './UI';
 
 type TreeDatum = { sector?: Sector; mean?: number; children?: TreeDatum[] };
 type Tile = HierarchyRectangularNode<TreeDatum>;
@@ -110,34 +112,34 @@ export function TreemapChart() {
       const fontSize = w > 200 && h > 100 ? 19 : w > 125 && h > 70 ? 16 : 13;
       const padding = w > 100 ? 12 : 7;
       const lines = w >= 58 && h >= 31 ? wrap(d.data.sector!.short[state.lang], w - padding * 2, fontSize, Math.min(3, Math.floor((h - 12) / (fontSize * 1.16)))) : [];
-      const text = d3select(this).select<SVGTextElement>('text.tile-label').attr('clip-path', `url(#tile-clip-${d.data.sector!.id})`).style('font-size', `${fontSize}px`);
+      const text = d3select(this).select<SVGTextElement>('text.tile-label').attr('clip-path', `url(#tile-clip-${d.data.sector!.id})`).style('font-size', `${fontSize}px`).style('fill', tileInk(d.data.sector!.colour));
       text.selectAll<SVGTSpanElement, string>('tspan').data(lines).join('tspan').attr('x', padding).attr('y', (_, i) => padding + fontSize * .8 + i * fontSize * 1.17).text(s => s);
       const showValue = w >= 120 && h >= 90 && lines.length * fontSize * 1.17 + 45 < h;
-      d3select(this).selectAll<SVGTextElement, number>('text.tile-value').data(showValue ? [d.value!] : []).join('text').attr('class', 'tile-value').attr('x', padding).attr('y', h - 15).text(value => `${pct(value / total, state.lang)} · ${compact(value, state.lang)}`);
+      d3select(this).selectAll<SVGTextElement, number>('text.tile-value').data(showValue ? [d.value!] : []).join('text').attr('class', 'tile-value').style('fill', tileInk(d.data.sector!.colour)).attr('x', padding).attr('y', h - 15).text(value => `${pct(value / total, state.lang)} · ${compact(value, state.lang)}`);
     });
     return () => { parent.selectAll('*').interrupt(); };
   }, [data, state.year, state.lang, state.sector, select, reducedMotion, width, height, tree, pause, t, fontsReady]);
   return <div ref={container} className="treemap-wrap" style={{ minHeight: height }}><svg className="treemap-svg" width={width || '100%'} height={height} role="group" aria-label={`${t.structureTitle} ${state.year}. ${t.structureHint}`}><g ref={ref} /></svg><Tooltip content={tooltip} /></div>;
 }
 
-export function RankingChart({ rows }: { rows: SectorChange[] }) {
+export function RankingChart({ rows, metric }: { rows: SectorChange[]; metric: Metric }) {
   const { state, select, reducedMotion } = useApp(), t = messages[state.lang];
   const [container, width] = useSize();
   const ref = useRef<SVGGElement>(null), axis = useRef<SVGGElement>(null);
   const previousWidth = useRef(0);
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
-  const visible = useMemo(() => ordered(rows, state.metric, state.sort, state.view === 'leaders'), [rows, state.metric, state.sort, state.view]);
-  const mobile = width < 680, rowHeight = mobile ? 72 : 54, height = visible.length * rowHeight + 36;
+  const visible = useMemo(() => ordered(rows, metric, state.sort, state.view === 'leaders'), [rows, metric, state.sort, state.view]);
+  const mobile = width < 680, rowHeight = mobile ? 58 : 42, height = visible.length * rowHeight + 36;
   const outside = state.sector ? rows.find(row => row.sector.id === state.sector && !visible.some(v => v.sector.id === state.sector)) : undefined;
   useEffect(() => {
     if (!width || !ref.current || !axis.current) return;
     const parent = d3select(ref.current), guide = d3select(axis.current), duration = reducedMotion || previousWidth.current !== width ? 0 : 550;
     previousWidth.current = width;
-    const values = rows.map(r => r[state.metric]).filter(v => v !== null) as number[];
+    const values = rows.map(r => r[metric]).filter(v => v !== null) as number[];
     const min = Math.min(0, ...values), max = Math.max(0, ...values);
     const plotStart = mobile ? 0 : 232, plotEnd = mobile ? width - 2 : width - 100;
     const x = scaleLinear().domain(min === max ? [-1, 1] : [min, max]).range([plotStart + 2, plotEnd - 3]);
-    const zero = x(0), barY = mobile ? 40 : 16, barHeight = mobile ? 17 : 22;
+    const zero = x(0), barY = mobile ? 31 : 12, barHeight = mobile ? 15 : 18;
     const groups = parent.selectAll<SVGGElement, SectorChange>('g.rank-row').data(visible, d => d.sector.id);
     groups.exit().interrupt().remove();
     const entering = groups.enter().append('g').attr('class', 'rank-row').attr('role', 'button').attr('transform', (_, i) => `translate(0,${i * rowHeight})`);
@@ -149,82 +151,106 @@ export function RankingChart({ rows }: { rows: SectorChange[] }) {
     const merged = entering.merge(groups);
     merged.attr('tabindex', (d, i) => d.sector.id === state.sector || (!state.sector && i === 0) ? 0 : -1)
       .attr('data-sector', d => d.sector.id).attr('aria-pressed', d => String(d.sector.id === state.sector))
-      .attr('aria-label', d => `${d.sector.name[state.lang]}. ${state.from}–${state.to}: ${metricValue(d[state.metric], state.metric, state.lang)}. ${t.select}.`)
+      .attr('aria-label', d => `${d.sector.name[state.lang]}. ${state.from}–${state.to}: ${metricValue(d[metric], metric, state.lang)}. ${t.select}.`)
       .classed('selected', d => d.sector.id === state.sector)
       .on('click', (_, d) => { setTooltip(null); select(d.sector.id); })
-      .on('pointermove focus', function(event: PointerEvent | FocusEvent, d) { if (event instanceof PointerEvent && event.pointerType === 'touch') return; setTooltip({ ...position(event), title: d.sector.name[state.lang], value: metricValue(d[state.metric], state.metric, state.lang), sub: `${state.from} → ${state.to} · ${t[state.metric === 'share' ? 'shareChange' : state.metric === 'relative' ? 'percentChange' : 'peopleChange']}`, colour: d.sector.colour }); })
+      .on('pointermove focus', function(event: PointerEvent | FocusEvent, d) { if (event instanceof PointerEvent && event.pointerType === 'touch') return; setTooltip({ ...position(event), title: d.sector.name[state.lang], value: metricValue(d[metric], metric, state.lang), sub: `${state.from} → ${state.to} · ${t[metric === 'share' ? 'shareChange' : metric === 'relative' ? 'percentChange' : 'peopleChange']}`, colour: d.sector.colour }); })
       .on('pointerleave blur', () => setTooltip(null))
       .on('keydown', function(event: KeyboardEvent, d) { keyboardActivate(event, this, () => select(d.sector.id)); });
     merged.interrupt().transition().duration(duration).ease(easeCubicOut).attr('transform', (_, i) => `translate(0,${i * rowHeight})`);
     merged.select('rect.row-hit').attr('x', 0).attr('y', 0).attr('width', width).attr('height', rowHeight - 1);
     merged.select('line.row-guide').attr('x1', plotStart).attr('x2', plotEnd).attr('y1', barY + barHeight).attr('y2', barY + barHeight);
-    merged.select('rect.rank-bar').attr('y', barY).attr('height', barHeight).attr('fill', d => d.sector.colour).interrupt().transition().duration(duration).ease(easeCubicOut).attr('x', d => Math.min(zero, x(d[state.metric]!))).attr('width', d => Math.abs(x(d[state.metric]!) - zero));
+    merged.select('rect.rank-bar').attr('y', barY).attr('height', barHeight).attr('fill', d => d.sector.colour).interrupt().transition().duration(duration).ease(easeCubicOut).attr('x', d => Math.min(zero, x(d[metric]!))).attr('width', d => Math.abs(x(d[metric]!) - zero));
     merged.each(function(d) {
       const label = d3select(this).select('text.rank-label');
       const lines = wrap(d.sector.short[state.lang], mobile ? width - 130 : 215, mobile ? 13 : 14, 2);
-      label.selectAll<SVGTSpanElement, string>('tspan').data(lines).join('tspan').attr('x', 0).attr('y', (_, i) => (mobile ? 14 : lines.length === 1 ? 31 : 22) + i * 15).text(line => line);
+      label.selectAll<SVGTSpanElement, string>('tspan').data(lines).join('tspan').attr('x', 0).attr('y', (_, i) => (mobile ? 15 : lines.length === 1 ? 26 : 17) + i * 15).text(line => line);
     });
-    merged.select('text.rank-value').attr('x', width - 1).attr('y', mobile ? 15 : 31).attr('text-anchor', 'end').text(d => metricValue(d[state.metric], state.metric, state.lang));
-    guide.selectAll('line').data([0]).join('line').attr('class', 'zero-line').attr('x1', zero).attr('x2', zero).attr('y1', mobile ? 35 : 4).attr('y2', Math.max(20, visible.length * rowHeight));
+    merged.select('text.rank-value').attr('x', width - 1).attr('y', mobile ? 15 : 26).attr('text-anchor', 'end').text(d => metricValue(d[metric], metric, state.lang));
+    guide.selectAll('line').data([0]).join('line').attr('class', 'zero-line').attr('x1', zero).attr('x2', zero).attr('y1', mobile ? 26 : 4).attr('y2', Math.max(20, visible.length * rowHeight));
     guide.selectAll('text').data([0]).join('text').attr('class', 'axis-label').attr('x', zero).attr('y', visible.length * rowHeight + 20).attr('text-anchor', 'middle').text('0');
     return () => { parent.selectAll('*').interrupt(); };
-  }, [rows, visible, width, mobile, rowHeight, state, select, reducedMotion, t]);
-  return <div ref={container} className="ranking-chart"><svg width={width || '100%'} height={height} role="group" aria-label={`${t.rankingTitle} ${state.from}–${state.to}. ${t[state.metric === 'absolute' ? 'peopleChange' : state.metric === 'relative' ? 'percentChange' : 'shareChange']}`}><g ref={ref} /><g ref={axis} pointerEvents="none" /></svg>{!visible.length && <p className="empty-chart">{t.noChanges}</p>}{outside && <div className="outside-selection"><span>{t.selectedOutside}</span><button onClick={() => select(outside.sector.id)}><i style={{ background: outside.sector.colour }} />{outside.sector.name[state.lang]}<strong>{metricValue(outside[state.metric], state.metric, state.lang)}</strong></button></div>}<Tooltip content={tooltip} /></div>;
+  }, [rows, visible, width, mobile, rowHeight, state, metric, select, reducedMotion, t]);
+  return <div ref={container} className="ranking-chart"><svg width={width || '100%'} height={height} role="group" aria-label={`${t.rankingTitle} ${state.from}–${state.to}. ${t[metric === 'absolute' ? 'peopleChange' : metric === 'relative' ? 'percentChange' : 'shareChange']}`}><g ref={ref} /><g ref={axis} pointerEvents="none" /></svg>{!visible.length && <p className="empty-chart">{t.noChanges}</p>}{outside && <div className="outside-selection"><span>{t.selectedOutside}</span><button onClick={() => select(outside.sector.id)}><i style={{ background: outside.sector.colour }} />{outside.sector.name[state.lang]}<strong>{metricValue(outside[metric], metric, state.lang)}</strong></button></div>}<Tooltip content={tooltip} /></div>;
 }
 
-type ContributionSegment = { row: SectorChange; x: number; width: number; sign: number };
-export function ContributionChart({ rows }: { rows: SectorChange[] }) {
-  const { data, state, select, reducedMotion } = useApp(), t = messages[state.lang];
-  const [container, width] = useSize(), ref = useRef<SVGGElement>(null);
-  const axisRef = useRef<SVGGElement>(null), previousWidth = useRef(0);
-  const [tooltip, setTooltip] = useState<TooltipContent | null>(null), [all, setAll] = useState(false);
-  const start = national(data, state.from), end = national(data, state.to);
-  const values = contribution(rows, start !== null && end !== null ? end - start : null);
-  const positive = ordered(rows, 'absolute', 'gain', true).filter(r => r.absolute! > 0);
-  const negative = ordered(rows, 'absolute', 'loss', true).filter(r => r.absolute! < 0);
-  const list = all ? ordered(rows, 'absolute', 'magnitude', false) : [...positive.slice(0, 4), ...negative.slice(0, 3)];
+export function RankingDeck({ rows }: { rows: SectorChange[] }) {
+  const { state, update } = useApp(), t = messages[state.lang];
+  const deck = useRef<HTMLDivElement>(null), panes = useRef<(HTMLDivElement | null)[]>([]);
+  const metrics: Metric[] = ['absolute', 'relative', 'share'];
+  const [mobile, setMobile] = useState(() => matchMedia('(max-width: 767px)').matches);
+  const latest = useRef(state.metric); latest.current = state.metric;
+  const [deckHeight, setDeckHeight] = useState<number>();
   useEffect(() => {
-    if (!ref.current || !width || !values) return;
-    const parent = d3select(ref.current), total = values.positive + values.negative;
-    const duration = reducedMotion || previousWidth.current !== width ? 0 : 600;
-    previousWidth.current = width;
-    const x = scaleLinear().domain(total ? [-values.negative, values.positive] : [-1, 1]).range([1, width - 1]);
-    let p = 0, n = 0;
-    const segments: ContributionSegment[] = ordered(rows, 'absolute', 'magnitude', false).filter(r => r.absolute !== 0).map(row => {
-      const amount = row.absolute!;
-      if (amount > 0) { const segment = { row, x: x(p), width: x(p + amount) - x(p), sign: 1 }; p += amount; return segment; }
-      const segment = { row, x: x(n + amount), width: x(n) - x(n + amount), sign: -1 }; n += amount; return segment;
+    const media = matchMedia('(max-width: 767px)');
+    const change = () => setMobile(media.matches);
+    media.addEventListener('change', change); return () => media.removeEventListener('change', change);
+  }, []);
+  useEffect(() => {
+    if (mobile && deck.current) deck.current.scrollTo({ left: panes.current[metrics.indexOf(state.metric)]?.offsetLeft ?? 0, behavior: 'instant' });
+    // Scroll only this chart strip; keep the page's vertical position.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.metric, mobile]);
+  useEffect(() => {
+    if (!mobile || !deck.current) { setDeckHeight(undefined); return; }
+    const pane = panes.current[metrics.indexOf(state.metric)];
+    if (!pane) return;
+    const observer = new ResizeObserver(() => setDeckHeight(pane.getBoundingClientRect().height));
+    observer.observe(pane); return () => observer.disconnect();
+    // The selected pane's intrinsic size changes with sorting and show-all.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobile, state.metric]);
+  useEffect(() => {
+    if (!mobile || !deck.current) return;
+    let previous = deck.current.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (!deck.current || previous === deck.current.clientWidth) return;
+      previous = deck.current.clientWidth;
+      deck.current.scrollTo({ left: panes.current[metrics.indexOf(latest.current)]?.offsetLeft ?? 0, behavior: 'instant' });
     });
-    const groups = parent.selectAll<SVGGElement, ContributionSegment>('g.contribution-segment').data(segments, d => d.row.sector.id);
-    groups.exit().interrupt().remove();
-    const entering = groups.enter().append('g').attr('class', 'contribution-segment').attr('role', 'button');
-    entering.append('rect').attr('class', 'segment-shape').attr('x', x(0)).attr('width', 0).attr('y', 10).attr('height', 74);
-    const merged = entering.merge(groups);
-    merged.attr('tabindex', (d, i) => d.row.sector.id === state.sector || (!state.sector && i === 0) ? 0 : -1).classed('selected', d => d.row.sector.id === state.sector)
-      .attr('data-sector', d => d.row.sector.id).attr('aria-pressed', d => String(d.row.sector.id === state.sector))
-      .attr('aria-label', d => `${d.row.sector.name[state.lang]}. ${signed(d.row.absolute!, state.lang)} ${t.peopleEmployed}. ${t.select}.`)
-      .on('click', (_, d) => { select(d.row.sector.id); setTooltip(null); })
-      .on('pointermove focus', function(event: PointerEvent | FocusEvent, d) {
-        if (event instanceof PointerEvent && event.pointerType === 'touch') return;
-        const denominator = d.sign > 0 ? values.positive : values.negative;
-        setTooltip({ ...position(event), title: d.row.sector.name[state.lang], value: signed(d.row.absolute!, state.lang), sub: `${denominator > 0 ? pct(Math.abs(d.row.absolute!) / denominator, state.lang) : '—'} ${d.sign > 0 ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: d.row.sector.colour });
-      }).on('pointerleave blur', () => setTooltip(null))
-      .on('keydown', function(event: KeyboardEvent, d) { keyboardActivate(event, this, () => select(d.row.sector.id)); });
-    merged.select('rect.segment-shape').attr('fill', d => d.row.sector.colour).interrupt().transition().duration(duration).ease(easeCubicOut).attr('x', d => d.x).attr('width', d => Math.max(0, d.width));
-    const guide = d3select(axisRef.current);
-    guide.selectAll('line').data([0]).join('line').attr('class', 'zero-line').attr('y1', 2).attr('y2', 96).interrupt().transition().duration(duration).ease(easeCubicOut).attr('x1', x(0)).attr('x2', x(0));
-    guide.selectAll('text').data([0]).join('text').attr('class', 'axis-label').attr('y', 110).attr('text-anchor', 'middle').text('0').interrupt().transition().duration(duration).ease(easeCubicOut).attr('x', Math.max(6, Math.min(width - 6, x(0))));
-    return () => { parent.selectAll('*').interrupt(); };
-  }, [rows, values?.positive, values?.negative, width, state, select, reducedMotion, t]);
+    observer.observe(deck.current); return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobile]);
+  const settle = () => {
+    if (!mobile || !deck.current) return;
+    const index = Math.round(deck.current.scrollLeft / deck.current.clientWidth);
+    const metric = metrics[Math.max(0, Math.min(2, index))];
+    if (metric !== latest.current) update({ metric });
+  };
+  return <div className="ranking-deck" ref={deck} onScrollEnd={settle} style={mobile && deckHeight ? { height: deckHeight } : undefined}>{(mobile ? metrics : [state.metric]).map(metric => <div key={metric} ref={el => { panes.current[metrics.indexOf(metric)] = el; }} className="ranking-pane" aria-label={t[metric === 'absolute' ? 'peopleChange' : metric === 'relative' ? 'percentChange' : 'shareChange']} inert={mobile && metric !== state.metric}><p className="metric-unit">{t[metric === 'absolute' ? 'peopleChange' : metric === 'relative' ? 'percentChange' : 'shareChange']}</p><RankingChart rows={rows} metric={metric} /></div>)}</div>;
+}
+
+export function ContributionChart({ rows }: { rows: SectorChange[] }) {
+  const { data, state, select } = useApp(), t = messages[state.lang];
+  const [container, width] = useSize();
+  const [direction, setDirection] = useState<'increase' | 'decrease'>('increase');
+  const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
+  const values = contribution(rows, national(data, state.to)! - national(data, state.from)!);
+  const model = sectorFlows(rows, direction), layout = flowLayout(model.flows.map(f => f.value));
+  const mobile = width < 680, sourceX = 4, targetX = Math.max(mobile ? 60 : 75, width * (mobile ? .21 : .38));
+  const bracketX = width - (mobile ? 94 : 136), labelWidth = bracketX - targetX - 25;
+  const paths = layout.flows.map(f => {
+    const a = sourceX + 9, b = targetX, c = a + (b - a) * .48, d = b - (b - a) * .48;
+    const sy = layout.sourceY + f.sourceOffset, ty = f.targetY, h = f.thickness;
+    return `M${a},${sy}C${c},${sy} ${d},${ty} ${b},${ty}L${b},${ty+h}C${d},${ty+h} ${c},${sy+h} ${a},${sy+h}Z`;
+  });
+  const groupLabel = (top: boolean) => {
+    const amount = top ? model.topTotal : model.restTotal, count = top ? model.top.length : model.rest.length;
+    const title = `${top ? t.topSectors : t.otherSectors} ${count}`;
+    return <><span>{title} {t.sectorsLabel}</span><strong>{fmt(amount, state.lang)}</strong><span>{model.total ? pct(amount / model.total, state.lang) : '—'}</span></>;
+  };
   if (!values) return <p>{t.unavailable}</p>;
-  return <div className="contribution-chart"><div className="contribution-equation"><div><span>{t.increases}</span><strong>+{fmt(values.positive, state.lang)}</strong></div><span className="equation-symbol" aria-hidden="true">−</span><div><span>{t.decreases}</span><strong>{fmt(values.negative, state.lang)}</strong></div><span className="equation-symbol" aria-hidden="true">≈</span><div className="net-total"><span>{t.net}</span><strong>{values.nationalNet === null ? t.unavailable : signed(values.nationalNet, state.lang)}</strong></div></div><div ref={container} className="contribution-band"><svg width={width || '100%'} height={112} role="group" aria-label={`${t.increases}: ${fmt(values.positive, state.lang)}. ${t.decreases}: ${fmt(values.negative, state.lang)}.`}><g ref={ref} /><g ref={axisRef} pointerEvents="none" /></svg></div><div className="contribution-leaders">{list.map(row => <button key={row.sector.id} className={row.sector.id === state.sector ? 'selected' : ''} aria-pressed={row.sector.id === state.sector} onClick={() => select(row.sector.id)}><i style={{ background: row.sector.colour }} /><span>{row.sector.short[state.lang]}</span><strong>{signed(row.absolute ?? 0, state.lang)}</strong></button>)}</div><button className="text-button contribution-expand" aria-expanded={all} onClick={() => setAll(!all)}>{all ? t.fewerContributions : t.contributionList}<Icon name="chevron" size={14} /></button><p className="chart-footnote">{t.contributionNote}</p><details className="rounding-detail"><summary>{t.rounding}: {values.roundingDifference === null ? t.unavailable : signed(values.roundingDifference, state.lang)}</summary><p>{t.roundingNote}</p><p>{fmt(values.positive, state.lang)} − {fmt(values.negative, state.lang)} {values.roundingDifference !== null ? signed(values.roundingDifference, state.lang) : ''} = {values.nationalNet !== null ? fmt(values.nationalNet, state.lang) : '—'}</p></details><Tooltip content={tooltip} /></div>;
+  return <div className="contribution-chart"><div className="contribution-toolbar"><div className="direction-toggle" role="group" aria-label={t.contributionTitle}>{(['increase', 'decrease'] as const).map(value => <button key={value} aria-pressed={direction === value} onClick={() => { setDirection(value); setTooltip(null); }}>{value === 'increase' ? t.increaseView : t.decreaseView}</button>)}</div><div className="sankey-total"><span>{direction === 'increase' ? t.increases : t.decreases}</span><strong>{direction === 'increase' ? '+' : '−'}{fmt(model.total, state.lang)}</strong></div></div><div ref={container} className="sankey-wrap">{model.total ? <><svg className="sankey-svg" width={width || '100%'} height={layout.height} role="group" aria-label={`${direction === 'increase' ? t.increases : t.decreases}: ${fmt(model.total, state.lang)}. ${t.sankeyDescription}`}><rect className="sankey-source" x={sourceX} y={layout.sourceY} width={9} height={layout.sourceHeight} /><g>{model.flows.map((flow, i) => {
+    const f = layout.flows[i], top = i < 6, lines = top ? wrap(flow.row.sector.short[state.lang], Math.max(30, labelWidth), mobile ? 12 : 14, 2) : [];
+    return <g key={flow.row.sector.id} className={`sankey-flow ${state.sector === flow.row.sector.id ? 'selected' : ''}`} role="button" tabIndex={i === 0 || state.sector === flow.row.sector.id ? 0 : -1} data-sector={flow.row.sector.id} aria-pressed={state.sector === flow.row.sector.id} aria-label={`${flow.row.sector.name[state.lang]}. ${fmt(flow.value, state.lang)} ${t.peopleEmployed}, ${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}. ${t.select}.`} onClick={() => { setTooltip(null); select(flow.row.sector.id); }} onKeyDown={e => keyboardActivate(e.nativeEvent, e.currentTarget, () => select(flow.row.sector.id))} onPointerMove={e => { if (e.pointerType !== 'touch') setTooltip({ x: e.clientX, y: e.clientY, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: `${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: flow.row.sector.colour }); }} onFocus={e => { const box = e.currentTarget.getBoundingClientRect(); setTooltip({ x: box.x, y: box.y, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: pct(flow.value / model.total, state.lang), colour: flow.row.sector.colour }); }} onPointerLeave={() => setTooltip(null)} onBlur={() => setTooltip(null)}><path className="sankey-ribbon" d={paths[i]} fill={flow.row.sector.colour} /><rect className="sankey-node" x={targetX} y={f.targetY} width={7} height={Math.max(.4, f.thickness)} fill={flow.row.sector.colour} />{top && <><rect className="sankey-hit" x={targetX} y={f.targetY + f.thickness / 2 - 27} width={Math.max(1, bracketX - targetX - 10)} height={54} fill="transparent" /><text className="sankey-name" x={targetX + 15} y={f.targetY + f.thickness / 2 - (lines.length > 1 ? 12 : 5)}>{lines.map((label, j) => <tspan x={targetX + 15} dy={j === 0 ? 0 : 14} key={j}>{label}</tspan>)}</text><text className="sankey-value" x={targetX + 15} y={f.targetY + f.thickness / 2 + 19}>{fmt(flow.value, state.lang)} · {pct(flow.value / model.total, state.lang)}</text></>}</g>;
+  })}</g><path className="sankey-bracket" d={`M${bracketX-7},18h7V${layout.topEnd}h-7`} />{model.rest.length > 0 && <path className="sankey-bracket" d={`M${bracketX-7},${layout.restStart}h7V${layout.height-20}h-7`} />}</svg><div className={`sankey-group top-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (18 + layout.topEnd) / 2 }}>{groupLabel(true)}</div>{model.rest.length > 0 && <div className={`sankey-group rest-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (layout.restStart + layout.height - 20) / 2 }}>{groupLabel(false)}</div>}</> : <p className="empty-chart">{t.noContributions}</p>}</div><Tooltip content={tooltip} /></div>;
 }
 
 export function HistoryChart({ sector }: { sector: Sector }) {
   const { data, state, update } = useApp(), t = messages[state.lang];
   const [container, width] = useSize(), [inspectYear, setInspectYear] = useState(state.year);
   useEffect(() => setInspectYear(state.year), [state.year, sector.id]);
-  const height = 236, margin = { top: 22, left: 42, right: 10, bottom: 29 };
+  const height = 190, margin = { top: 22, left: 42, right: 10, bottom: 29 };
   const points = data.years.map(year => ({ year, value: historicalValue(data, sector.id, year, state.detail) }));
   const max = Math.max(1e-8, ...points.map(p => p.value ?? 0)) * 1.1;
   const x = scaleLinear().domain([data.years[0], data.years.at(-1)!]).range([margin.left, Math.max(margin.left + 1, width - margin.right)]);

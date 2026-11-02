@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react';
 import { useApp } from '../state';
-import { crossesBreak, type Insight } from '../data';
+import { crossesBreak } from '../data';
 import { messages } from '../i18n';
 
-export function Icon({ name, size = 18 }: { name: 'arrow' | 'play' | 'pause' | 'share' | 'close' | 'search' | 'chevron' | 'info' | 'plus' | 'minus'; size?: number }) {
+export function Icon({ name, size = 18 }: { name: 'arrow' | 'play' | 'pause' | 'close' | 'search' | 'chevron' | 'info' | 'plus' | 'minus'; size?: number }) {
   const paths = {
     arrow: <><path d="M4 12h15M13 5l7 7-7 7" /></>,
     play: <path d="m8 5 11 7-11 7z" fill="currentColor" stroke="none" />,
     pause: <><path d="M8 5v14M16 5v14" strokeWidth="3" /></>,
-    share: <><path d="M12 15V3m-4 4 4-4 4 4M7 11H4v10h16V11h-3" /></>,
     close: <path d="m6 6 12 12M6 18 18 6" />,
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
     chevron: <path d="m6 9 6 6 6-6" />,
@@ -19,20 +18,17 @@ export function Icon({ name, size = 18 }: { name: 'arrow' | 'play' | 'pause' | '
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
+export function Brand({ compact = false }: { compact?: boolean }) {
+  return <a className={`wordmark ${compact ? 'wordmark-compact' : ''}`} href={import.meta.env.BASE_URL} aria-label="Ocupados">OCUPADOS<svg className="brand-symbol" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M0 0h11v16H0zM14 0h14v9H14zM14 12h14v16H14zM0 19h11v9H0z" /></svg></a>;
+}
+
 export function SectionHeading({ number, title, children, id }: { number: string; title: string; children?: ReactNode; id?: string }) {
   return <div className="section-heading"><div><span className="eyebrow">{number}</span><h2 id={id}>{title}</h2></div>{children}</div>;
 }
 
 export function BreakNote({ compact = false }: { compact?: boolean }) {
   const { state } = useApp(), t = messages[state.lang];
-  return crossesBreak(state.from, state.to) ? <a className={`break-note ${compact ? 'is-compact' : ''}`} href="#methodology-breaks"><Icon name="info" size={14} /><span>{compact ? t.breakBadge : t.breakShort}</span></a> : null;
-}
-
-export function InsightLine({ insight }: { insight: Insight | undefined }) {
-  const { state, select } = useApp();
-  if (!insight) return null;
-  const inner = <><span className="insight-marker" aria-hidden="true"><Icon name="arrow" size={18} /></span><span>{insight.text}</span>{insight.sector && <Icon name="arrow" size={17} />}</>;
-  return <div className="insight-line"><span className="sr-only">{messages[state.lang].estimates}. </span>{insight.sector ? <button onClick={() => select(insight.sector)}>{inner}</button> : <p>{inner}</p>}</div>;
+  return crossesBreak(state.from, state.to) ? <a className={`break-note ${compact ? 'is-compact' : ''}`} href="#methodology-breaks" onClick={() => { document.querySelectorAll<HTMLDetailsElement>('#methodology-panel, #methodology-breaks').forEach(el => { el.open = true; }); }}><Icon name="info" size={14} /><span>{compact ? t.breakBadge : t.breakShort}</span></a> : null;
 }
 
 export interface TooltipContent { x: number; y: number; title: string; value: string; sub: string; colour?: string }

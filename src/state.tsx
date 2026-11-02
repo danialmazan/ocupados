@@ -53,7 +53,8 @@ export function AppProvider({ data, children }: { data: Dataset; children: React
     const onVisibility = () => { if (document.hidden) setPlaying(false); };
     document.addEventListener('visibilitychange', onVisibility);
     // Remove invalid/unknown query parameters without adding an entry.
-    const debugQuery = import.meta.env.DEV && new URLSearchParams(location.search).has('audit') ? '&audit=1' : '';
+    const debugParams = new URLSearchParams(location.search);
+    const debugQuery = import.meta.env.DEV ? ['audit', 'palette'].filter(key => debugParams.has(key)).map(key => `&${key}=${encodeURIComponent(debugParams.get(key)!)}`).join('') : '';
     window.history.replaceState(null, '', `${window.location.pathname}${stateSearch(ref.current)}${debugQuery}${window.location.hash}`);
     return () => { window.removeEventListener('popstate', onPop); media.removeEventListener('change', onMotion); document.removeEventListener('visibilitychange', onVisibility); };
   }, [data]);

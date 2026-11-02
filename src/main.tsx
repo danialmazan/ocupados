@@ -5,6 +5,8 @@ import type { Dataset } from './types';
 import { messages } from './i18n';
 import { App } from './App';
 import './styles.css';
+import { Brand } from './components/UI';
+import { activePalette, applyPalette, palettes, type PaletteId } from './palettes';
 
 if (import.meta.env.DEV && new URLSearchParams(location.search).has('audit')) {
   void import('./devAudit').then(module => module.installAudit());
@@ -19,12 +21,13 @@ function Loader() {
     setError(false);
     fetch(`${import.meta.env.BASE_URL}data/employment.json`, { signal: controller.signal }).then(response => { if (!response.ok) throw new Error('Data unavailable'); return response.json(); }).then((loaded: Dataset) => {
       if (loaded.schemaVersion !== 1 || loaded.sectors.length !== 35 || !loaded.years.length || loaded.classification !== 'CNAE-2009') throw new Error('Incompatible data release');
-      setData(loaded);
+      const requested = import.meta.env.DEV ? new URLSearchParams(location.search).get('palette') : null;
+      setData(applyPalette(loaded, requested && Object.hasOwn(palettes, requested) ? requested as PaletteId : activePalette));
     }).catch(e => { if (e.name !== 'AbortError') setError(true); });
     return () => controller.abort();
   }, [attempt]);
-  if (error) return <main className="loading-page" lang={lang}><span className="wordmark">OCUPADOS.</span><h1>{t.loadError}</h1><button className="dark-button" onClick={() => setAttempt(a => a + 1)}>{t.retry}</button><a href={`${import.meta.env.BASE_URL}data/employment.csv`}>{t.downloadCsv}</a></main>;
-  if (!data) return <main className="loading-page" aria-busy="true" lang={lang}><span className="wordmark">OCUPADOS.</span><p>{t.loading}</p><span className="loading-line" /></main>;
+  if (error) return <main className="loading-page" lang={lang}><Brand /><h1>{t.loadError}</h1><button className="dark-button" onClick={() => setAttempt(a => a + 1)}>{t.retry}</button><a href={`${import.meta.env.BASE_URL}data/employment.csv`}>{t.downloadCsv}</a></main>;
+  if (!data) return <main className="loading-page" aria-busy="true" lang={lang}><Brand /><p>{t.loading}</p><span className="loading-line" /></main>;
   return <AppProvider data={data}><App /></AppProvider>;
 }
 
