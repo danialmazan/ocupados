@@ -61,6 +61,7 @@ export function TreemapChart() {
   const { data, state, select, reducedMotion, pause } = useApp(), t = messages[state.lang];
   const [container, width] = useSize();
   const ref = useRef<SVGGElement>(null);
+  const previousSize = useRef({ width: 0, height: 0 });
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
   const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => { void document.fonts.ready.then(() => setFontsReady(true)); }, []);
@@ -81,7 +82,9 @@ export function TreemapChart() {
     const parent = d3select(ref.current);
     const root = tree.root.sum(d => d.sector ? (persons(data, d.sector.id, state.year) ?? 0) : 0);
     const tiles = tree.layout.size([width, height])(root).leaves();
-    const duration = reducedMotion ? 0 : 600;
+    const resizing = previousSize.current.width !== width || previousSize.current.height !== height;
+    const duration = reducedMotion || resizing ? 0 : 600;
+    previousSize.current = { width, height };
     const total = national(data, state.year)!;
     const groups = parent.selectAll<SVGGElement, Tile>('g.treemap-cell').data(tiles, d => d.data.sector!.id);
     groups.exit().interrupt().remove();
@@ -121,13 +124,15 @@ export function RankingChart({ rows }: { rows: SectorChange[] }) {
   const { state, select, reducedMotion } = useApp(), t = messages[state.lang];
   const [container, width] = useSize();
   const ref = useRef<SVGGElement>(null), axis = useRef<SVGGElement>(null);
+  const previousWidth = useRef(0);
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null);
   const visible = useMemo(() => ordered(rows, state.metric, state.sort, state.view === 'leaders'), [rows, state.metric, state.sort, state.view]);
   const mobile = width < 680, rowHeight = mobile ? 72 : 54, height = visible.length * rowHeight + 36;
   const outside = state.sector ? rows.find(row => row.sector.id === state.sector && !visible.some(v => v.sector.id === state.sector)) : undefined;
   useEffect(() => {
     if (!width || !ref.current || !axis.current) return;
-    const parent = d3select(ref.current), guide = d3select(axis.current), duration = reducedMotion ? 0 : 550;
+    const parent = d3select(ref.current), guide = d3select(axis.current), duration = reducedMotion || previousWidth.current !== width ? 0 : 550;
+    previousWidth.current = width;
     const values = rows.map(r => r[state.metric]).filter(v => v !== null) as number[];
     const min = Math.min(0, ...values), max = Math.max(0, ...values);
     const plotStart = mobile ? 0 : 232, plotEnd = mobile ? width - 2 : width - 100;
@@ -171,16 +176,18 @@ type ContributionSegment = { row: SectorChange; x: number; width: number; sign: 
 export function ContributionChart({ rows }: { rows: SectorChange[] }) {
   const { data, state, select, reducedMotion } = useApp(), t = messages[state.lang];
   const [container, width] = useSize(), ref = useRef<SVGGElement>(null);
+  const axisRef = useRef<SVGGElement>(null), previousWidth = useRef(0);
   const [tooltip, setTooltip] = useState<TooltipContent | null>(null), [all, setAll] = useState(false);
   const start = national(data, state.from), end = national(data, state.to);
   const values = contribution(rows, start !== null && end !== null ? end - start : null);
   const positive = ordered(rows, 'absolute', 'gain', true).filter(r => r.absolute! > 0);
   const negative = ordered(rows, 'absolute', 'loss', true).filter(r => r.absolute! < 0);
   const list = all ? ordered(rows, 'absolute', 'magnitude', false) : [...positive.slice(0, 4), ...negative.slice(0, 3)];
-  const zero = values ? width * values.negative / (values.positive + values.negative || 1) : 0;
   useEffect(() => {
     if (!ref.current || !width || !values) return;
     const parent = d3select(ref.current), total = values.positive + values.negative;
+    const duration = reducedMotion || previousWidth.current !== width ? 0 : 600;
+    previousWidth.current = width;
     const x = scaleLinear().domain(total ? [-values.negative, values.positive] : [-1, 1]).range([1, width - 1]);
     let p = 0, n = 0;
     const segments: ContributionSegment[] = ordered(rows, 'absolute', 'magnitude', false).filter(r => r.absolute !== 0).map(row => {
@@ -203,11 +210,14 @@ export function ContributionChart({ rows }: { rows: SectorChange[] }) {
         setTooltip({ ...position(event), title: d.row.sector.name[state.lang], value: signed(d.row.absolute!, state.lang), sub: `${denominator > 0 ? pct(Math.abs(d.row.absolute!) / denominator, state.lang) : '—'} ${d.sign > 0 ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: d.row.sector.colour });
       }).on('pointerleave blur', () => setTooltip(null))
       .on('keydown', function(event: KeyboardEvent, d) { keyboardActivate(event, this, () => select(d.row.sector.id)); });
-    merged.select('rect.segment-shape').attr('fill', d => d.row.sector.colour).interrupt().transition().duration(reducedMotion ? 0 : 600).ease(easeCubicOut).attr('x', d => d.x).attr('width', d => Math.max(0, d.width));
+    merged.select('rect.segment-shape').attr('fill', d => d.row.sector.colour).interrupt().transition().duration(duration).ease(easeCubicOut).attr('x', d => d.x).attr('width', d => Math.max(0, d.width));
+    const guide = d3select(axisRef.current);
+    guide.selectAll('line').data([0]).join('line').attr('class', 'zero-line').attr('y1', 2).attr('y2', 96).interrupt().transition().duration(duration).ease(easeCubicOut).attr('x1', x(0)).attr('x2', x(0));
+    guide.selectAll('text').data([0]).join('text').attr('class', 'axis-label').attr('y', 110).attr('text-anchor', 'middle').text('0').interrupt().transition().duration(duration).ease(easeCubicOut).attr('x', Math.max(6, Math.min(width - 6, x(0))));
     return () => { parent.selectAll('*').interrupt(); };
   }, [rows, values?.positive, values?.negative, width, state, select, reducedMotion, t]);
   if (!values) return <p>{t.unavailable}</p>;
-  return <div className="contribution-chart"><div className="contribution-equation"><div><span>{t.increases}</span><strong>+{fmt(values.positive, state.lang)}</strong></div><span className="equation-symbol" aria-hidden="true">−</span><div><span>{t.decreases}</span><strong>{fmt(values.negative, state.lang)}</strong></div><span className="equation-symbol" aria-hidden="true">≈</span><div className="net-total"><span>{t.net}</span><strong>{values.nationalNet === null ? t.unavailable : signed(values.nationalNet, state.lang)}</strong></div></div><div ref={container} className="contribution-band"><svg width={width || '100%'} height={112} role="group" aria-label={`${t.increases}: ${fmt(values.positive, state.lang)}. ${t.decreases}: ${fmt(values.negative, state.lang)}.`}><g ref={ref} /><line className="zero-line" x1={zero} x2={zero} y1={2} y2={96} /><text className="axis-label" x={Math.max(6, Math.min(width - 6, zero))} y={110} textAnchor="middle">0</text></svg></div><div className="contribution-leaders">{list.map(row => <button key={row.sector.id} className={row.sector.id === state.sector ? 'selected' : ''} aria-pressed={row.sector.id === state.sector} onClick={() => select(row.sector.id)}><i style={{ background: row.sector.colour }} /><span>{row.sector.short[state.lang]}</span><strong>{signed(row.absolute ?? 0, state.lang)}</strong></button>)}</div><button className="text-button contribution-expand" aria-expanded={all} onClick={() => setAll(!all)}>{all ? t.fewerContributions : t.contributionList}<Icon name="chevron" size={14} /></button><p className="chart-footnote">{t.contributionNote}</p><details className="rounding-detail"><summary>{t.rounding}: {values.roundingDifference === null ? t.unavailable : signed(values.roundingDifference, state.lang)}</summary><p>{t.roundingNote}</p><p>{fmt(values.positive, state.lang)} − {fmt(values.negative, state.lang)} {values.roundingDifference !== null ? signed(values.roundingDifference, state.lang) : ''} = {values.nationalNet !== null ? fmt(values.nationalNet, state.lang) : '—'}</p></details><Tooltip content={tooltip} /></div>;
+  return <div className="contribution-chart"><div className="contribution-equation"><div><span>{t.increases}</span><strong>+{fmt(values.positive, state.lang)}</strong></div><span className="equation-symbol" aria-hidden="true">−</span><div><span>{t.decreases}</span><strong>{fmt(values.negative, state.lang)}</strong></div><span className="equation-symbol" aria-hidden="true">≈</span><div className="net-total"><span>{t.net}</span><strong>{values.nationalNet === null ? t.unavailable : signed(values.nationalNet, state.lang)}</strong></div></div><div ref={container} className="contribution-band"><svg width={width || '100%'} height={112} role="group" aria-label={`${t.increases}: ${fmt(values.positive, state.lang)}. ${t.decreases}: ${fmt(values.negative, state.lang)}.`}><g ref={ref} /><g ref={axisRef} pointerEvents="none" /></svg></div><div className="contribution-leaders">{list.map(row => <button key={row.sector.id} className={row.sector.id === state.sector ? 'selected' : ''} aria-pressed={row.sector.id === state.sector} onClick={() => select(row.sector.id)}><i style={{ background: row.sector.colour }} /><span>{row.sector.short[state.lang]}</span><strong>{signed(row.absolute ?? 0, state.lang)}</strong></button>)}</div><button className="text-button contribution-expand" aria-expanded={all} onClick={() => setAll(!all)}>{all ? t.fewerContributions : t.contributionList}<Icon name="chevron" size={14} /></button><p className="chart-footnote">{t.contributionNote}</p><details className="rounding-detail"><summary>{t.rounding}: {values.roundingDifference === null ? t.unavailable : signed(values.roundingDifference, state.lang)}</summary><p>{t.roundingNote}</p><p>{fmt(values.positive, state.lang)} − {fmt(values.negative, state.lang)} {values.roundingDifference !== null ? signed(values.roundingDifference, state.lang) : ''} = {values.nationalNet !== null ? fmt(values.nationalNet, state.lang) : '—'}</p></details><Tooltip content={tooltip} /></div>;
 }
 
 export function HistoryChart({ sector }: { sector: Sector }) {
