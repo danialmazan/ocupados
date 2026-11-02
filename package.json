@@ -1,0 +1,45 @@
+{
+  "name": "ocupados",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run data:validate && npm run social && tsc -b && vite build && node tools/check-budgets.mjs",
+    "social": "node tools/generate-social.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "data:refresh": "python3 -m pipeline.build --fetch",
+    "data:validate": "python3 -m pipeline.build --check",
+    "test": "vitest run && python3 -m unittest discover -s pipeline/tests -v",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "^5.2.0",
+    "@fontsource-variable/source-serif-4": "^5.2.0",
+    "d3-ease": "^3.0.1",
+    "d3-hierarchy": "^3.1.2",
+    "d3-scale": "^4.0.2",
+    "d3-selection": "^3.0.0",
+    "d3-shape": "^3.2.0",
+    "d3-transition": "^3.0.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/d3-ease": "^3.0.2",
+    "@types/d3-hierarchy": "^3.1.7",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-shape": "^3.1.7",
+    "@types/d3-transition": "^3.0.9",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.2.0",
+    "axe-core": "^4.14.0",
+    "sharp": "^0.35.5",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.5",
+    "vitest": "^4.1.12"
+  }
+}

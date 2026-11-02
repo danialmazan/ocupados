@@ -1,0 +1,24 @@
+name: Prepare official-data candidate (never publishes)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Download and validate candidate
+        run: python3 -m pipeline.build --fetch
+      - run: python3 -m unittest discover -s pipeline/tests -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-data-candidate
+          path: |
+            data/raw/
+            data/audit.json
+            public/data/
+      - run: echo 'Review source revisions, flags, reconciliation and the year/classification boundary before committing a release.' >> "$GITHUB_STEP_SUMMARY"
