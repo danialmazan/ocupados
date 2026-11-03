@@ -7,7 +7,8 @@ import { easeCubicOut } from 'd3-ease';
 import 'd3-transition';
 import { contribution, historicalValue, national, ordered, persons, readableYearValue } from '../data';
 import { compact, fmt, messages, metricValue, pct } from '../i18n';
-import { useSize, useTouchTap } from '../hooks';
+import { useMobileLayout, useSize, useTouchTap } from '../hooks';
+import { readingLabelBox, readingTreemap } from '../readingTreemap';
 import { useApp } from '../state';
 import { tileInk } from '../palettes';
 import { sectorFlows, flowLayout } from '../sankey';
@@ -18,11 +19,14 @@ type TreeDatum = { sector?: Sector; mean?: number; children?: TreeDatum[] };
 type Tile = HierarchyRectangularNode<TreeDatum>;
 
 let measureContext: CanvasRenderingContext2D | null = null;
-function wrap(text: string, width: number, fontSize: number, maxLines: number): string[] {
-  if (maxLines < 1 || width < 10) return [];
+function measureLabel(text: string, fontSize: number) {
   measureContext ??= document.createElement('canvas').getContext('2d');
   if (measureContext) measureContext.font = `580 ${fontSize}px "Archivo Variable"`;
-  const measure = (s: string) => measureContext ? measureContext.measureText(s).width : s.length * fontSize * .55;
+  return measureContext ? measureContext.measureText(text).width : text.length * fontSize * .55;
+}
+function wrap(text: string, width: number, fontSize: number, maxLines: number): string[] {
+  if (maxLines < 1 || width < 10) return [];
+  const measure = (s: string) => measureLabel(s, fontSize);
   const fit = (s: string, ellipsis = false) => {
     let value = s;
     while (value && measure(value + (ellipsis ? '…' : '')) > width) value = value.slice(0, -1);
@@ -68,18 +72,17 @@ export function TreemapChart() {
   useEffect(() => setTooltip(null), [state.sector]);
   const [fontsReady, setFontsReady] = useState(false);
   useEffect(() => { void document.fonts.ready.then(() => setFontsReady(true)); }, []);
-  const mobile = width > 0 && width < 680;
+  const mobile = useMobileLayout();
   const height = mobile ? Math.max(480, Math.min(590, width * 1.5)) : 440;
-  const ready = width > 0;
   const tree = useMemo(() => {
     const root = hierarchy<TreeDatum>({ children: data.sectors.map(sector => ({ sector, mean: data.years.reduce((sum, year) => sum + (persons(data, sector.id, year) ?? 0), 0) / data.years.length })) })
       .sum(d => d.mean ?? 0).sort((a, b) => (b.value! - a.value!) || (a.data.sector?.id ?? '').localeCompare(b.data.sector?.id ?? ''));
-    const layout = treemap<TreeDatum>().tile(treemapResquarify).size([width || 1000, height]).paddingInner(2).round(true);
+    const tile = mobile ? readingTreemap<TreeDatum>(d => d.sector!.short.es.split(' ').map(word => measureLabel(word, 13))) : treemapResquarify;
+    const layout = treemap<TreeDatum>().tile(tile).size([width || 1000, height]).paddingInner(2).round(true);
     layout(root); // Cache topology from all-year means, before displaying an individual year.
     return { root, layout };
-    // Width changes within a breakpoint reuse the cached topology.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, mobile, ready]);
+    // Reflow on a real resize; keep the reference topology during year changes.
+  }, [data, mobile, width, height, fontsReady]);
   useEffect(() => {
     if (!ref.current || !width) return;
     const parent = d3select(ref.current);
@@ -110,9 +113,9 @@ export function TreemapChart() {
     merged.select<SVGRectElement>('clipPath rect').attr('x', 5).attr('y', 4).attr('width', d => Math.max(0, d.x1 - d.x0 - 10)).attr('height', d => Math.max(0, d.y1 - d.y0 - 8));
     merged.each(function(d) {
       const w = d.x1 - d.x0, h = d.y1 - d.y0;
-      const fontSize = w > 200 && h > 100 ? 19 : w > 125 && h > 70 ? 16 : 13;
-      const padding = w > 100 ? 12 : 7;
-      const lines = w >= 58 && h >= 31 ? wrap(d.data.sector!.short[state.lang], w - padding * 2, fontSize, Math.min(3, Math.floor((h - 12) / (fontSize * 1.16)))) : [];
+      const desktopFont = w > 200 && h > 100 ? 19 : w > 125 && h > 70 ? 16 : 13;
+      const { fontSize, padding, maxLines } = mobile ? readingLabelBox(w, h) : { fontSize: desktopFont, padding: w > 100 ? 12 : 7, maxLines: w >= 58 && h >= 31 ? Math.min(3, Math.floor((h - 12) / (desktopFont * 1.16))) : 0 };
+      const lines = wrap(d.data.sector!.short[state.lang], w - padding * 2, fontSize, maxLines);
       const text = d3select(this).select<SVGTextElement>('text.tile-label').attr('clip-path', `url(#tile-clip-${d.data.sector!.id})`).style('font-size', `${fontSize}px`).style('fill', tileInk(d.data.sector!.colour));
       text.selectAll<SVGTSpanElement, string>('tspan').data(lines).join('tspan').attr('x', padding).attr('y', (_, i) => padding + fontSize * .8 + i * fontSize * 1.17).text(s => s);
       const showValue = w >= 120 && h >= 90 && lines.length * fontSize * 1.17 + 45 < h;
@@ -231,9 +234,10 @@ export function ContributionChart({ rows, direction, onDirectionChange }: { rows
   useEffect(() => setTooltip(null), [state.sector]);
   const values = contribution(rows, national(data, state.to)! - national(data, state.from)!);
   const model = sectorFlows(rows, direction);
-  const mobile = width < 680, sourceX = 4, targetX = Math.max(mobile ? 60 : 75, width * (mobile ? .21 : .38));
-  const layout = flowLayout(model.flows.map(f => f.value), 238, mobile ? 50 : 58);
+  const mobile = useMobileLayout(), sourceX = 4, targetX = Math.max(mobile ? 60 : 75, width * (mobile ? .21 : .38));
   const bracketX = width - (mobile ? 94 : 136), labelWidth = bracketX - targetX - 25;
+  const labels = model.top.map(flow => wrap(flow.row.sector.short[state.lang], Math.max(30, labelWidth), mobile ? 12 : 14, 2));
+  const layout = flowLayout(model.flows.map(f => f.value), 238, mobile ? labels.map(lines => lines.length > 1 ? 42 : 34) : 58);
   const paths = layout.flows.map(f => {
     const a = sourceX + 9, b = targetX, c = a + (b - a) * .48, d = b - (b - a) * .48;
     const sy = layout.sourceY + f.sourceOffset, ty = f.targetY, h = f.thickness;
@@ -246,8 +250,8 @@ export function ContributionChart({ rows, direction, onDirectionChange }: { rows
   };
   if (!values) return <p>{t.unavailable}</p>;
   return <div className="contribution-chart"><div className="contribution-toolbar"><div className="direction-toggle" role="group" aria-label={t.contributionTitle}>{(['increase', 'decrease'] as const).map(value => <button key={value} aria-pressed={direction === value} onClick={() => { onDirectionChange(value); setTooltip(null); }}>{value === 'increase' ? t.increaseView : t.decreaseView}</button>)}</div><div className="sankey-total"><span>{direction === 'increase' ? t.increases : t.decreases}</span><strong>{direction === 'increase' ? '+' : '−'}{fmt(model.total, state.lang)}</strong></div></div><div ref={container} className="sankey-wrap">{model.total ? <><svg className="sankey-svg" width={width || '100%'} height={layout.height} role="group" aria-label={`${direction === 'increase' ? t.increases : t.decreases}: ${fmt(model.total, state.lang)}. ${t.sankeyDescription}`}><rect className="sankey-source" x={sourceX} y={layout.sourceY} width={9} height={layout.sourceHeight} /><g>{model.flows.map((flow, i) => {
-    const f = layout.flows[i], top = i < 6, lines = top ? wrap(flow.row.sector.short[state.lang], Math.max(30, labelWidth), mobile ? 12 : 14, 2) : [];
-    return <g key={flow.row.sector.id} className={`sankey-flow ${state.sector === flow.row.sector.id ? 'selected' : ''}`} role="button" tabIndex={i === 0 || state.sector === flow.row.sector.id ? 0 : -1} data-sector={flow.row.sector.id} aria-pressed={state.sector === flow.row.sector.id} aria-label={`${flow.row.sector.name[state.lang]}. ${fmt(flow.value, state.lang)} ${t.peopleEmployed}, ${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}. ${t.select}.`} onClick={() => { setTooltip(null); select(flow.row.sector.id); }} onKeyDown={e => keyboardActivate(e.nativeEvent, e.currentTarget, () => select(flow.row.sector.id))} onPointerMove={e => { if (e.pointerType !== 'touch') setTooltip({ x: e.clientX, y: e.clientY, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: `${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: flow.row.sector.colour }); }} onFocus={e => { if (restoringFocus.current) return; const box = e.currentTarget.getBoundingClientRect(); setTooltip({ x: box.x, y: box.y, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: pct(flow.value / model.total, state.lang), colour: flow.row.sector.colour }); }} onPointerLeave={() => setTooltip(null)} onBlur={() => setTooltip(null)}><path className="sankey-ribbon" d={paths[i]} fill={flow.row.sector.colour} /><rect className="sankey-node" x={targetX} y={f.targetY} width={7} height={Math.max(.4, f.thickness)} fill={flow.row.sector.colour} />{top && <><rect className="sankey-hit" x={targetX} y={f.targetY + f.thickness / 2 - (mobile ? 24 : 27)} width={Math.max(1, bracketX - targetX - 10)} height={mobile ? 48 : 54} fill="transparent" /><text className="sankey-name" x={targetX + 15} y={f.targetY + f.thickness / 2 - (lines.length > 1 ? 12 : 5)}>{lines.map((label, j) => <tspan x={targetX + 15} dy={j === 0 ? 0 : 14} key={j}>{label}</tspan>)}</text><text className="sankey-value" x={targetX + 15} y={f.targetY + f.thickness / 2 + 19}>{fmt(flow.value, state.lang)} · {pct(flow.value / model.total, state.lang)}</text></>}</g>;
+    const f = layout.flows[i], top = i < 6, lines = top ? labels[i] : [];
+    return <g key={flow.row.sector.id} className={`sankey-flow ${state.sector === flow.row.sector.id ? 'selected' : ''}`} role="button" tabIndex={i === 0 || state.sector === flow.row.sector.id ? 0 : -1} data-sector={flow.row.sector.id} aria-pressed={state.sector === flow.row.sector.id} aria-label={`${flow.row.sector.name[state.lang]}. ${fmt(flow.value, state.lang)} ${t.peopleEmployed}, ${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}. ${t.select}.`} onClick={() => { setTooltip(null); select(flow.row.sector.id); }} onKeyDown={e => keyboardActivate(e.nativeEvent, e.currentTarget, () => select(flow.row.sector.id))} onPointerMove={e => { if (e.pointerType !== 'touch') setTooltip({ x: e.clientX, y: e.clientY, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: `${pct(flow.value / model.total, state.lang)} ${direction === 'increase' ? t.grossIncreaseShare : t.grossDecreaseShare}`, colour: flow.row.sector.colour }); }} onFocus={e => { if (restoringFocus.current) return; const box = e.currentTarget.getBoundingClientRect(); setTooltip({ x: box.x, y: box.y, title: flow.row.sector.name[state.lang], value: fmt(flow.value, state.lang), sub: pct(flow.value / model.total, state.lang), colour: flow.row.sector.colour }); }} onPointerLeave={() => setTooltip(null)} onBlur={() => setTooltip(null)}><path className="sankey-ribbon" d={paths[i]} fill={flow.row.sector.colour} /><rect className="sankey-node" x={targetX} y={f.targetY} width={7} height={Math.max(.4, f.thickness)} fill={flow.row.sector.colour} />{top && <><rect className="sankey-hit" x={targetX} y={f.targetY + f.thickness / 2 - (mobile ? f.slot / 2 : 27)} width={Math.max(1, bracketX - targetX - 10)} height={mobile ? f.slot : 54} fill="transparent" /><text className="sankey-name" x={targetX + 15} y={f.targetY + f.thickness / 2 - (lines.length > 1 ? mobile ? 10 : 12 : mobile ? 3 : 5)}>{lines.map((label, j) => <tspan x={targetX + 15} dy={j === 0 ? 0 : mobile ? 13 : 14} key={j}>{label}</tspan>)}</text><text className="sankey-value" x={targetX + 15} y={f.targetY + f.thickness / 2 + (mobile ? lines.length > 1 ? 16 : 10 : 19)}>{fmt(flow.value, state.lang)} · {pct(flow.value / model.total, state.lang)}</text></>}</g>;
   })}</g><path className="sankey-bracket" d={`M${bracketX-7},18h7V${layout.topEnd}h-7`} />{model.rest.length > 0 && <path className="sankey-bracket" d={`M${bracketX-7},${layout.restStart}h7V${layout.height-20}h-7`} />}</svg><div className={`sankey-group top-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (18 + layout.topEnd) / 2 }}>{groupLabel(true)}</div>{model.rest.length > 0 && <div className={`sankey-group rest-group ${mobile ? 'mobile-group' : ''}`} style={{ top: (layout.restStart + layout.height - 20) / 2 }}>{groupLabel(false)}</div>}</> : <p className="empty-chart">{t.noContributions}</p>}</div><Tooltip content={state.sector ? null : tooltip} /></div>;
 }
 
@@ -256,7 +260,7 @@ export function HistoryChart({ sector }: { sector: Sector }) {
   const [container, width] = useSize(), [inspectYear, setInspectYear] = useState(state.year), tap = useTouchTap();
   const pinnedYear = useRef(state.year);
   useEffect(() => { pinnedYear.current = state.year; setInspectYear(state.year); }, [state.year, sector.id]);
-  const height = width > 0 && width < 680 ? 166 : 190, margin = { top: 22, left: 42, right: 10, bottom: 29 };
+  const height = useMobileLayout() ? 150 : 190, margin = { top: 22, left: 42, right: 10, bottom: 29 };
   const points = data.years.map(year => ({ year, value: historicalValue(data, sector.id, year, state.detail) }));
   const max = Math.max(1e-8, ...points.map(p => p.value ?? 0)) * 1.1;
   const x = scaleLinear().domain([data.years[0], data.years.at(-1)!]).range([margin.left, Math.max(margin.left + 1, width - margin.right)]);

@@ -37,11 +37,16 @@ describe('Sankey changes, denominators and geometry', () => {
   it('compacts mobile top-six spacing without changing flow widths or allowing overlaps', () => {
     for (const [index, from] of data.years.entries()) for (const to of data.years.slice(index + 1)) for (const direction of ['increase', 'decrease'] as const) {
       const values = sectorFlows(changes(data, from, to), direction).flows.map(f => f.value);
-      const desktop = flowLayout(values), mobile = flowLayout(values, 238, 50);
+      const desktop = flowLayout(values), mobile = flowLayout(values, 238, [34, 42, 34, 42, 34, 34]);
       expect(mobile.height).toBeLessThanOrEqual(desktop.height);
       expect(mobile.flows.map(f => f.thickness)).toEqual(desktop.flows.map(f => f.thickness));
       mobile.flows.forEach((f, i) => { if (i > 0) expect(f.targetY).toBeGreaterThan(mobile.flows[i - 1].targetY + mobile.flows[i - 1].thickness); });
     }
+  });
+  it('brings one-line mobile flow labels and bands substantially closer', () => {
+    const values = sectorFlows(changes(data, 2018, 2025), 'increase').flows.map(f => f.value);
+    const desktop = flowLayout(values), mobile = flowLayout(values, 238, Array(6).fill(34));
+    expect(mobile.topEnd - 18).toBeLessThan((desktop.topEnd - 18) * .65);
   });
   it('handles no changes and fewer than six sectors', () => {
     expect(flowLayout([])).toMatchObject({ flows: [], sourceHeight: 0 });

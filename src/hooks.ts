@@ -15,6 +15,18 @@ export function useSize() {
   return [ref, width] as const;
 }
 
+export function useMobileLayout() {
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)');
+    const changed = () => setMobile(query.matches);
+    changed();
+    query.addEventListener('change', changed);
+    return () => query.removeEventListener('change', changed);
+  }, []);
+  return mobile;
+}
+
 export function useAnimatedNumber(value: number, reducedMotion: boolean, precision = 1) {
   const [display, setDisplay] = useState(value);
   const current = useRef(value);

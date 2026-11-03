@@ -168,3 +168,32 @@
 @media(max-width:390px){.period-inner .period-dropdown{left:16px;right:16px}}
 @media(max-width:767px){.national-summary{grid-template-columns:minmax(0,1.65fr) minmax(0,1fr)}}
 @media(max-width:350px){.summary-change strong{font-size:22px}}
+
+/* The total is the headline figure, with a restrained typographic underline. */
+.total-line strong{text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:.12em;text-decoration-skip-ink:auto}
+.sector-heading-row{row-gap:16px;margin-bottom:18px}
+.sector-heading-row>.inspector-title{grid-column:1;grid-row:1}
+.sector-heading-row>.sector-current{grid-column:2;grid-row:1}
+.sector-heading-row>.sector-description{grid-column:1/-1;grid-row:2;margin:0}
+.sector-current-year{display:none}
+/* Anchor search to the visible screen, including the area above a phone keyboard. */
+.sector-search{position:fixed;top:var(--search-top,12px);bottom:auto;right:max(20px,calc((100vw - 1344px)/2));width:520px;max-height:min(480px,var(--search-height,calc(100dvh - 24px)));display:flex;flex-direction:column;z-index:51}
+.sector-search-heading{flex:none}
+.sector-results{min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y}
+@media(max-width:767px){
+ .sector-heading-row{grid-template-columns:minmax(0,1fr);gap:8px;margin-bottom:8px}
+ .sector-heading-row>.inspector-title{grid-column:1;grid-row:1}
+ .sector-heading-row>.sector-description{grid-column:1;grid-row:2}
+ .inspector-title h2{font-size:25px;overflow-wrap:normal}
+ .sector-heading-row>.sector-current{grid-column:1;grid-row:3;grid-template-columns:14% minmax(0,1.7fr) minmax(0,1fr) minmax(0,.7fr);gap:10px;padding:4px 0 10px;border-bottom:1px solid var(--line)}
+ .sector-current dd{font-size:clamp(19px,3.6vw,27px)}
+ .sector-current dt{font-size:9px}
+ .sector-current-year{display:flex;align-items:center;text-align:left}
+ .sector-current-year dd{font-family:'Archivo Variable',sans-serif;font-size:11px;font-weight:600;letter-spacing:0;margin:0}
+ .sector-comparison{margin-bottom:10px}
+ .history-mode{margin-bottom:6px}
+ .history-readout{line-height:1.25}
+ .sector-search{left:16px;right:16px;top:var(--search-top,12px);bottom:auto;width:auto;max-width:none;max-height:min(480px,var(--search-height,calc(100dvh - 24px)))}
+}
+@media(max-width:390px){.sector-heading-row>.sector-current{gap:6px}.inspector-title h2{font-size:24px}}
+@media(max-width:350px){.sector-current dd{font-size:17px}.sector-current-year dd{font-size:10px}.sector-current dt{font-size:8px}}

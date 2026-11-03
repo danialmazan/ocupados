@@ -81,7 +81,22 @@ export function Timeline() {
 export function SectorPicker() {
   const { data, state, select } = useApp(), t = messages[state.lang];
   const [open, setOpen] = useState(false), [query, setQuery] = useState('');
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null), search = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const viewport = window.visualViewport;
+    const fit = () => {
+      // Follow the visible viewport when a phone keyboard or browser chrome resizes it.
+      const top = (viewport?.offsetTop ?? 0) + 12;
+      search.current?.style.setProperty('--search-top', `${top}px`);
+      search.current?.style.setProperty('--search-height', `${(viewport?.height ?? window.innerHeight) - 24}px`);
+    };
+    fit();
+    viewport?.addEventListener('resize', fit);
+    viewport?.addEventListener('scroll', fit);
+    window.addEventListener('resize', fit);
+    return () => { viewport?.removeEventListener('resize', fit); viewport?.removeEventListener('scroll', fit); window.removeEventListener('resize', fit); };
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const onOutside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false); };
@@ -89,5 +104,5 @@ export function SectorPicker() {
   }, [open]);
   const normalise = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const filtered = data.sectors.filter(s => normalise(`${s.name[state.lang]} ${s.description[state.lang]}`).includes(normalise(query)));
-  return <div ref={root} className="sector-picker" onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); document.getElementById('sector-picker')?.focus(); } }}><button id="sector-picker" className="sector-picker-trigger" aria-expanded={open} aria-controls="sector-search" onClick={() => setOpen(!open)}><Icon name="search" size={16} />{t.selectSector}<Icon name="chevron" size={14} /></button>{open && <div id="sector-search" className="sector-search"><div className="sector-search-heading"><label className="sr-only" htmlFor="sector-query">{t.searchSector}</label><input id="sector-query" type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={t.searchPlaceholder} /><button className="icon-button" aria-label={t.close} onClick={() => { setOpen(false); document.getElementById('sector-picker')?.focus(); }}><Icon name="close" size={17} /></button></div><div className="sector-results">{filtered.map(s => <button key={s.id} aria-pressed={state.sector === s.id} onClick={() => { select(s.id); setOpen(false); }}><i style={{ background: s.colour }} />{s.name[state.lang]}<Icon name="arrow" size={14} /></button>)}{!filtered.length && <p>{t.noSectors}</p>}</div></div>}</div>;
+  return <div ref={root} className="sector-picker" onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); document.getElementById('sector-picker')?.focus(); } }}><button id="sector-picker" className="sector-picker-trigger" aria-expanded={open} aria-controls="sector-search" onClick={() => setOpen(!open)}><Icon name="search" size={16} />{t.selectSector}<Icon name="chevron" size={14} /></button>{open && <div ref={search} id="sector-search" className="sector-search"><div className="sector-search-heading"><label className="sr-only" htmlFor="sector-query">{t.searchSector}</label><input id="sector-query" type="search" autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder={t.searchPlaceholder} /><button className="icon-button" aria-label={t.close} onClick={() => { setOpen(false); document.getElementById('sector-picker')?.focus(); }}><Icon name="close" size={17} /></button></div><div className="sector-results">{filtered.map(s => <button key={s.id} aria-pressed={state.sector === s.id} onClick={() => { select(s.id); setOpen(false); }}><i style={{ background: s.colour }} />{s.name[state.lang]}<Icon name="arrow" size={14} /></button>)}{!filtered.length && <p>{t.noSectors}</p>}</div></div>}</div>;
 }
