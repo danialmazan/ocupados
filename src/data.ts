@@ -1,11 +1,11 @@
-import type { Dataset, Exploration, Metric, SectorChange, Sort } from './types';
+import type { Dataset, Exploration, Lang, Metric, SectorChange, Sort } from './types';
 import { fmt, interpolate, messages, pct, signed, type MessageKey } from './i18n';
 
 export function defaults(data: Dataset): Exploration {
   return { lang: 'es', from: data.years.includes(2018) ? 2018 : data.years[0], to: data.years.at(-1)!, year: data.years.at(-1)!, sector: null, metric: 'absolute', sort: 'gain', view: 'leaders', detail: 'people' };
 }
 
-export function parseState(search: string, data: Dataset): Exploration {
+export function parseState(search: string, data: Dataset, fallbackLang: Lang = 'es'): Exploration {
   const params = new URLSearchParams(search), fallback = defaults(data);
   const readYear = (key: string, defaultYear: number) => {
     const raw = params.get(key);
@@ -14,7 +14,7 @@ export function parseState(search: string, data: Dataset): Exploration {
   let from = readYear('from', fallback.from), to = readYear('to', fallback.to);
   if (!data.years.includes(from) || !data.years.includes(to) || from >= to) { from = fallback.from; to = fallback.to; }
   const year = readYear('year', to), sector = params.get('sector');
-  return { lang: params.get('lang') === 'en' ? 'en' : 'es', from, to, year: data.years.includes(year) && year >= from && year <= to ? year : to,
+  return { lang: params.get('lang') === 'en' ? 'en' : params.get('lang') === 'es' ? 'es' : fallbackLang, from, to, year: data.years.includes(year) && year >= from && year <= to ? year : to,
     sector: data.sectors.some(s => s.id === sector) ? sector : null,
     metric: (['absolute', 'relative', 'share'].includes(params.get('metric') ?? '') ? params.get('metric') : 'absolute') as Metric,
     sort: (['gain', 'loss', 'magnitude'].includes(params.get('sort') ?? '') ? params.get('sort') : 'gain') as Sort,

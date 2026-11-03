@@ -71,7 +71,9 @@ On mobile the three ranking metrics form a horizontally scrollable strip. Select
 
 ## Link previews
 
-Static HTML supplies the exact Spanish title and description requested for sharing, Open Graph and Twitter tags, and explicit image dimensions and alternative text. `src/share.ts` keeps the browser title consistent. `tools/generate-social.mjs` renders `public/social-v2.png` from the reviewed employment data and palette. Fontkit and WOFF2 decompression turn the self-hosted Archivo and Source Serif glyphs into outlines, so the preview is independent of system fonts. The old image URL remains available for existing references.
+Static HTML supplies localized sharing titles, descriptions, Open Graph and Twitter tags, and image alternative text before JavaScript runs. Spanish uses `/ocupados/`; English uses `/ocupados/en/`, a separate HTML entry because GitHub Pages cannot vary its response by `?lang=`. The EN/ES switch updates the path while preserving the comparison, displayed year, sector, metric and hash. Existing `?lang=en` links still restore their state, then normalize the browser address to the English path. Share the English path for English crawler previews.
+
+`src/share.ts` keeps runtime document metadata consistent with the language. `tools/generate-social.mjs` renders `public/social-v2.png` in Spanish and `public/social-en-v1.png` in English from the reviewed employment data and palette. Fontkit and WOFF2 decompression turn the self-hosted Archivo and Source Serif glyphs into outlines, so the preview is independent of system fonts. Spanish copy and the existing Spanish image URL remain unchanged.
 
 ## Deployment
 

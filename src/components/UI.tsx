@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useApp } from '../state';
 import { crossesBreak } from '../data';
 import { messages } from '../i18n';
+import { languageFromUrl, pagePath } from '../share';
 
 export function Icon({ name, size = 18 }: { name: 'arrow' | 'play' | 'pause' | 'close' | 'search' | 'chevron' | 'info' | 'plus' | 'minus'; size?: number }) {
   const paths = {
@@ -19,7 +20,7 @@ export function Icon({ name, size = 18 }: { name: 'arrow' | 'play' | 'pause' | '
 }
 
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return <a className={`wordmark ${compact ? 'wordmark-compact' : ''}`} href={import.meta.env.BASE_URL} aria-label="Ocupados">OCUPADOS<svg className="brand-symbol" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M0 0h11v16H0zM14 0h14v9H14zM14 12h14v16H14zM0 19h11v9H0z" /></svg></a>;
+  return <a className={`wordmark ${compact ? 'wordmark-compact' : ''}`} href={pagePath(languageFromUrl(location.pathname, location.search))} aria-label="Ocupados">OCUPADOS<svg className="brand-symbol" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M0 0h11v16H0zM14 0h14v9H14zM14 12h14v16H14zM0 19h11v9H0z" /></svg></a>;
 }
 
 export function SectionHeading({ number, title, children, id }: { number: string; title: string; children?: ReactNode; id?: string }) {

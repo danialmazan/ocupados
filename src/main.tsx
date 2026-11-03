@@ -7,13 +7,14 @@ import { App } from './App';
 import './styles.css';
 import { Brand } from './components/UI';
 import { activePalette, applyPalette, palettes, type PaletteId } from './palettes';
+import { languageFromUrl } from './share';
 
 if (import.meta.env.DEV && new URLSearchParams(location.search).has('audit')) {
   void import('./devAudit').then(module => module.installAudit());
 }
 
 function Loader() {
-  const lang = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'es';
+  const lang = languageFromUrl(location.pathname, location.search);
   const t = messages[lang];
   const [data, setData] = useState<Dataset | null>(null), [error, setError] = useState(false), [attempt, setAttempt] = useState(0);
   useEffect(() => {

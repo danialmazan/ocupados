@@ -19,4 +19,4 @@ console.log(JSON.stringify(result, null, 2));
 writeFileSync(new URL('../data/build-budgets.json', import.meta.url), JSON.stringify(result, null, 2) + '\n');
 if (js > 200000 || data > 50000 || initial > 400000) throw new Error('Initial transfer budget exceeded');
 // The published page must contain no missing first-party file reference.
-for (const name of ['data/employment.json', 'data/employment.csv', 'favicon.svg']) if (!statSync(join(root.pathname, name)).isFile()) throw new Error(`Missing ${name}`);
+for (const name of ['data/employment.json', 'data/employment.csv', 'favicon.svg', 'en/index.html', 'social-v2.png', 'social-en-v1.png']) if (!statSync(join(root.pathname, name)).isFile()) throw new Error(`Missing ${name}`);

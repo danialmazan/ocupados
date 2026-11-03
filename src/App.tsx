@@ -6,7 +6,7 @@ import { Header, NationalSummary, SectorPicker, Timeline } from './components/Co
 import { TreemapChart, RankingDeck, ContributionChart } from './components/charts';
 import { Inspector } from './components/Inspector';
 import { AccessibleTable, Methodology } from './components/Methodology';
-import { shareMetadata } from './share';
+import { applyShareMetadata } from './share';
 import { BreakNote, Icon, SectionHeading } from './components/UI';
 
 export function App() {
@@ -14,8 +14,7 @@ export function App() {
   const [flowDirection, setFlowDirection] = useState<'increase' | 'decrease'>('increase');
   const rows = useMemo(() => changes(data, state.from, state.to), [data, state.from, state.to]);
   useEffect(() => {
-    document.documentElement.lang = state.lang;
-    document.title = shareMetadata.title;
+    applyShareMetadata(state.lang);
     document.documentElement.dataset.motion = reducedMotion ? 'reduced' : 'full';
   }, [state.lang, t.subtitle, reducedMotion]);
   useEffect(() => {

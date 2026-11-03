@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { defaults, parseState, stateSearch } from './data';
 import type { Dataset, Exploration } from './types';
+import { languageFromUrl, pagePath } from './share';
 
 type UpdateMode = 'push' | 'replace' | 'none';
 interface AppContextValue {
@@ -16,7 +17,7 @@ interface AppContextValue {
 }
 const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ data, children }: { data: Dataset; children: ReactNode }) {
-  const [state, dispatch] = useReducer((_: Exploration, next: Exploration) => next, data, d => parseState(window.location.search, d));
+  const [state, dispatch] = useReducer((_: Exploration, next: Exploration) => next, data, d => parseState(window.location.search, d, languageFromUrl(window.location.pathname, window.location.search)));
   const ref = useRef(state), restoringFocus = useRef(false), lastInput = useRef('keyboard');
   const [playing, setPlaying] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -24,7 +25,7 @@ export function AppProvider({ data, children }: { data: Dataset; children: React
     const next = { ...ref.current, ...patch };
     if (stateSearch(next) === stateSearch(ref.current)) return;
     ref.current = next;
-    if (mode !== 'none') window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', `${window.location.pathname}${stateSearch(next)}${window.location.hash}`);
+    if (mode !== 'none') window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', `${pagePath(next.lang)}${stateSearch(next)}${window.location.hash}`);
     dispatch(next);
   }, []);
   const restoreFocus = useCallback((target: HTMLElement | null) => {
@@ -53,12 +54,12 @@ export function AppProvider({ data, children }: { data: Dataset; children: React
     if (playing) { setPlaying(false); return; }
     const nextYear = ref.current.year >= ref.current.to ? ref.current.from : ref.current.year;
     // Keep side effects outside state updaters (also safe under React StrictMode).
-    window.history.pushState(null, '', `${window.location.pathname}${stateSearch({ ...ref.current, year: nextYear })}${window.location.hash}`);
+    window.history.pushState(null, '', `${pagePath(ref.current.lang)}${stateSearch({ ...ref.current, year: nextYear })}${window.location.hash}`);
     update({ year: nextYear }, 'replace');
     setPlaying(true);
   }, [reducedMotion, step, update, playing]);
   useEffect(() => {
-    const onPop = () => { const restored = parseState(window.location.search, data); ref.current = restored; dispatch(restored); setPlaying(false); };
+    const onPop = () => { const restored = parseState(window.location.search, data, languageFromUrl(window.location.pathname, window.location.search)); ref.current = restored; dispatch(restored); setPlaying(false); };
     window.addEventListener('popstate', onPop);
     const media = matchMedia('(prefers-reduced-motion: reduce)');
     const onMotion = () => { setReducedMotion(media.matches); if (media.matches) setPlaying(false); };
@@ -68,7 +69,7 @@ export function AppProvider({ data, children }: { data: Dataset; children: React
     // Remove invalid/unknown query parameters without adding an entry.
     const debugParams = new URLSearchParams(location.search);
     const debugQuery = import.meta.env.DEV ? ['audit', 'palette'].filter(key => debugParams.has(key)).map(key => `&${key}=${encodeURIComponent(debugParams.get(key)!)}`).join('') : '';
-    window.history.replaceState(null, '', `${window.location.pathname}${stateSearch(ref.current)}${debugQuery}${window.location.hash}`);
+    window.history.replaceState(null, '', `${pagePath(ref.current.lang)}${stateSearch(ref.current)}${debugQuery}${window.location.hash}`);
     return () => { window.removeEventListener('popstate', onPop); media.removeEventListener('change', onMotion); document.removeEventListener('visibilitychange', onVisibility); };
   }, [data]);
   useEffect(() => {
